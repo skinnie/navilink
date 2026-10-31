@@ -15,6 +15,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -180,6 +184,7 @@ class MainActivity : ComponentActivity() {
         var input by remember { mutableStateOf("") }
         var menu by remember { mutableStateOf(false) }
         var busy by remember { mutableStateOf(false) }
+        var logOpen by remember { mutableStateOf(false) }
         var category by remember { mutableStateOf(prefs.getString("category", "NaviLink")!!) }
         /** Ticked places, or all of them when none are ticked. */
         fun chosen() = if (State.selected.isEmpty()) State.places.toList() else State.selected.sorted().mapNotNull { State.places.getOrNull(it) }
@@ -206,7 +211,8 @@ class MainActivity : ComponentActivity() {
             State.log(if (code == 200) "nüvi accepted ${stops.size} place(s)." else "nüvi answered: ${code ?: "nothing"}")
         }
 
-        Column(Modifier.fillMaxSize().safeDrawingPadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        @Composable
+        fun Controls() = Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("NaviLink", style = MaterialTheme.typography.titleLarge)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = { menu = true }) { Text(dev?.let { "${it.name ?: "?"} (${it.address})" } ?: "Pick nüvi…") }
@@ -288,23 +294,66 @@ class MainActivity : ComponentActivity() {
                     }
                 }) { Text("Save as GPI") }
             }
-            LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
-                itemsIndexed(State.places) { i, p ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(i in State.selected, { on -> if (on) State.selected += i else State.selected -= i })
-                        Column(Modifier.weight(1f)) {
-                            Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("%.5f, %.5f".format(Locale.ROOT, p.lat, p.lon) + (p.category?.let { "  · $it" } ?: ""),
-                                style = MaterialTheme.typography.bodySmall)
+        }
+
+        @Composable
+        fun Places(modifier: Modifier) {
+            Column(modifier) {
+                Text("Places (${State.places.size})", style = MaterialTheme.typography.labelLarge)
+                if (State.places.isEmpty()) Text(
+                    "Share a place from Google Maps to NaviLink, type one above, or open a GPX / GPI file.",
+                    style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
+                    itemsIndexed(State.places) { i, p ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(i in State.selected, { on -> if (on) State.selected += i else State.selected -= i })
+                            Column(Modifier.weight(1f)) {
+                                Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("%.5f, %.5f".format(Locale.ROOT, p.lat, p.lon) + (p.category?.let { "  · $it" } ?: ""),
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                            TextButton(onClick = { send(listOf(p)) }) { Text("Send") }
                         }
-                        TextButton(onClick = { send(listOf(p)) }) { Text("Send") }
                     }
                 }
             }
-            HorizontalDivider()
-            Text("Log", style = MaterialTheme.typography.labelMedium)
-            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp), state = rememberLazyListState()) {
-                itemsIndexed(State.log) { _, l -> Text(l, fontFamily = FontFamily.Monospace, fontSize = 11.sp) }
+        }
+
+        /** The log; [folded] shows only the latest line (tap "Log" to open it). */
+        @Composable
+        fun Log(modifier: Modifier, foldable: Boolean) {
+            Column(modifier) {
+                val folded = foldable && !logOpen
+                if (foldable) TextButton(onClick = { logOpen = !logOpen }, contentPadding = PaddingValues(0.dp)) {
+                    Text(if (folded) "Log ▸" else "Log ▾", style = MaterialTheme.typography.labelMedium)
+                } else Text("Log", style = MaterialTheme.typography.labelMedium)
+                val lines = if (folded) State.log.take(1) else State.log
+                LazyColumn(Modifier.fillMaxWidth(), state = rememberLazyListState()) {
+                    itemsIndexed(lines) { _, l -> Text(l, fontFamily = FontFamily.Monospace, fontSize = 11.sp, maxLines = if (folded) 1 else Int.MAX_VALUE) }
+                }
+            }
+        }
+
+        BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().padding(12.dp)) {
+            if (maxWidth >= 840.dp) {
+                // Tablet landscape: controls and log on the left, the places on the right.
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Controls()
+                        HorizontalDivider()
+                        Log(Modifier.weight(1f), foldable = false)
+                    }
+                    VerticalDivider()
+                    Places(Modifier.weight(1f).fillMaxHeight())
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Controls()
+                    HorizontalDivider()
+                    Places(Modifier.fillMaxWidth().weight(1f))
+                    HorizontalDivider()
+                    Log(Modifier.fillMaxWidth().heightIn(max = 180.dp), foldable = true)
+                }
             }
         }
     }

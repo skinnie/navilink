@@ -3,6 +3,8 @@
 Send places from Google Maps to a Garmin nüvi over Bluetooth, and put your own POIs on it,
 without Garmin Smartphone Link. An Android app.
 
+<p><img src="docs/tablet.png" alt="NaviLink on a tablet: Bluetooth and POI buttons and the log on the left, five places around Leiria ready to send on the right"></p>
+
 Built for the **nüvi 3490 on firmware 8.50**, including nüvi 3790/3760/3750 units converted to a 3490.
 Other nüvis that work with Smartphone Link on Android probably speak the same protocol, but haven't been tried.
 

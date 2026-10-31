@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 12+ -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Android 11 and older -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <application
+        android:label="NaviLink"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Share from Google Maps / browser / chat: a link, coordinates or an address -->
+            <intent-filter android:label="Send to nüvi">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <!-- geo: links -->
+            <intent-filter android:label="Send to nüvi">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="geo" />
+            </intent-filter>
+            <!-- Shared or opened GPX / GPI files -->
+            <intent-filter android:label="Send to nüvi">
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/gpx+xml" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/xml" />
+                <data android:mimeType="text/xml" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

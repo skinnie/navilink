@@ -110,13 +110,13 @@ desktop JVM; the Android screens and Bluetooth are in `app/src/androidMain`.
 | `nuvi/Protocol.kt` | message framing, `/new-route`, answers to the nüvi's requests |
 | `nuvi/GpiWriter.kt` | `.gpi` writer |
 | `nuvi/Files.kt` | GPX/GPI import, GPX export |
-| `core/` | Google Maps link parsing, GPX and GPI reading (shared with [MapsToTom](https://github.com/skinnie/MapsToTom)) |
+| `core/` | Google Maps link parsing, GPX and GPI reading (shared with [MapsToTom](https://github.com/skinnie/MapsToTom/tree/kotlin-app/composeApp/src/jvmSharedMain/kotlin/app/mapstotom/core)) |
 | `BtLink.kt` | the two Bluetooth links |
 | `UsbInstall.kt` | writing to `Garmin/POI` on the nüvi's drive |
 
 ## Related
 
-- [MapsToTom](https://github.com/skinnie/MapsToTom): the same idea for old TomTom navigators.
+- [MapsToTom](https://github.com/skinnie/MapsToTom/tree/kotlin-app): the same idea for old TomTom navigators.
 - [MapsReceiver](https://github.com/shaun-plumb/MapsReceiver): passes Google Maps shares on to Smartphone Link.
 - [GPSBabel](https://www.gpsbabel.org): converts between GPS file formats, including `.gpi`.
 

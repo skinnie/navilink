@@ -36,7 +36,11 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -56,16 +60,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.navilink.core.RealNet
 import app.navilink.core.parseInput
+import app.navilink.nuvi.CABLE_FILE
 import app.navilink.nuvi.Place
+import app.navilink.nuvi.Route
 import app.navilink.nuvi.buildGpi
 import app.navilink.nuvi.gpiFileName
 import app.navilink.nuvi.placesFromFile
 import app.navilink.nuvi.placesToGpx
+import app.navilink.nuvi.routeName
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -76,6 +84,8 @@ object State {
     val log = mutableStateListOf<String>()
     var status by mutableStateOf("Not connected")
     var device by mutableStateOf<String?>(null) // MAC address
+    var cable by mutableStateOf(false)            // send by cable (USB) instead of Bluetooth
+    var drive by mutableStateOf<String?>(null)    // name of the nüvi's drive last picked
 
     fun log(s: String) {
         val t = SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(Date())
@@ -105,22 +115,25 @@ class MainActivity : ComponentActivity() {
     private var pendingTree: CompletableDeferred<Uri?>? = null
     private val treePicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { pendingTree?.complete(it) }
     private val perms = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh() }
-    private var incoming by mutableStateOf<Intent?>(null)
+    /** Shares and opened files, handled in order (several can arrive before the screen is up). */
+    private val incoming = Channel<Intent>(Channel.UNLIMITED)
     private var tick by mutableStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         State.device = State.device ?: prefs.getString("device", null)
+        State.cable = prefs.getBoolean("cable", false)
+        State.drive = State.drive ?: prefs.getString("usbName", null)
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             perms.launch(arrayOf(Manifest.permission.BLUETOOTH_CONNECT))
         }
-        incoming = intent
+        incoming.trySend(intent)
         setContent { MaterialTheme { Surface(Modifier.fillMaxSize()) { Screen() } } }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        incoming = intent
+        incoming.trySend(intent)
     }
 
     private fun refresh() { tick++ }
@@ -174,9 +187,27 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** The nüvi's drive: the one picked before if it's plugged in, otherwise ask (and remember the answer). */
+    private suspend fun drive(ask: Boolean = false): Uri? {
+        val saved = prefs.getString("usbTree", null)?.let(Uri::parse)
+        if (!ask && saved != null && withContext(Dispatchers.IO) { driveReady(this@MainActivity, saved) }) return saved
+        State.log("Plug the nüvi in with a USB OTG cable, wait for Android to show it, then pick its drive.")
+        val d = CompletableDeferred<Uri?>().also { pendingTree = it }
+        treePicker.launch(saved)
+        val tree = d.await() ?: return null
+        runCatching {
+            contentResolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }
+        val name = withContext(Dispatchers.IO) { driveName(this@MainActivity, tree) }
+        prefs.edit().putString("usbTree", tree.toString()).putString("usbName", name).apply()
+        State.drive = name
+        return tree
+    }
+
     @SuppressLint("MissingPermission")
     private fun devices(): List<BluetoothDevice> = runCatching { link.bonded() }.getOrDefault(emptyList())
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @SuppressLint("MissingPermission")
     @Composable
     private fun Screen() {
@@ -192,7 +223,7 @@ class MainActivity : ComponentActivity() {
         val devs = devices()
         val dev = devs.firstOrNull { it.address == State.device } ?: devs.firstOrNull { link.looksLikeGarmin(it) }
 
-        LaunchedEffect(incoming) { incoming?.let { handle(it) }; incoming = null }
+        LaunchedEffect(Unit) { for (i in incoming) handle(i) }
 
         fun bt(label: String, block: () -> Unit) {
             if (busy) return
@@ -205,34 +236,85 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        fun send(stops: List<Place>) = bt("Send") {
+        /** Drive work: may open the folder picker, so it runs on the main thread and does file work on IO. */
+        fun usb(label: String, block: suspend () -> Unit) {
+            if (busy) return
+            busy = true
+            scope.launch {
+                runCatching { block() }.onFailure { State.log("$label failed: ${it.message}") }
+                busy = false
+            }
+        }
+
+        fun btSend(stops: List<Place>) = bt("Send") {
             if (link.connectedTo == null) link.connect(dev ?: error("Pick the nüvi first (pair it in Android Bluetooth settings)"))
             val code = link.send(stops)
             State.log(if (code == 200) "nüvi accepted ${stops.size} place(s)." else "nüvi answered: ${code ?: "nothing"}")
         }
 
+        fun cableSend(places: List<Place>, route: Route?) = usb("Send by cable") {
+            val tree = drive() ?: return@usb
+            val f = withContext(Dispatchers.IO) { sendByCable(this@MainActivity, tree, places, route) }
+            val what = route?.let { "route \"${it.name}\" (${it.stops.size} stops)" } ?: places.singleOrNull()?.name ?: "${places.size} places"
+            State.log("Wrote $what to Garmin/GPX/$CABLE_FILE (now ${f.places.size} place(s), ${f.routes.size} route(s)).")
+            State.log("Eject the nüvi and unplug it. When it starts, places go to Saved and routes to Trip Planner.")
+        }
+
+        /** One place: go there (Bluetooth) or save it (cable). Several: a route. */
+        fun send(stops: List<Place>) = when {
+            !State.cable -> btSend(stops)
+            stops.size == 1 -> cableSend(stops, null)
+            else -> cableSend(emptyList(), Route(routeName(stops), stops))
+        }
+
         @Composable
         fun Controls() = Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("NaviLink", style = MaterialTheme.typography.titleLarge)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { menu = true }) { Text(dev?.let { "${it.name ?: "?"} (${it.address})" } ?: "Pick nüvi…") }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    if (devs.isEmpty()) DropdownMenuItem(text = { Text("No paired devices (or no Bluetooth permission)") }, onClick = { menu = false })
-                    devs.forEach { d ->
-                        DropdownMenuItem(text = { Text("${d.name ?: "?"}  ${d.address}") }, onClick = {
-                            State.device = d.address; prefs.edit().putString("device", d.address).apply(); menu = false
-                        })
-                    }
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                listOf(false to "Bluetooth", true to "Cable (USB)").forEachIndexed { i, (c, label) ->
+                    SegmentedButton(selected = State.cable == c, shape = SegmentedButtonDefaults.itemShape(i, 2), onClick = {
+                        State.cable = c; prefs.edit().putBoolean("cable", c).apply()
+                    }) { Text(label) }
                 }
-                Text("  ${State.status}${if (busy) " …" else ""}", style = MaterialTheme.typography.bodySmall)
             }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Button(onClick = { bt("Connect") { link.connect(dev ?: error("Pick the nüvi first")) } }) { Text("Connect") }
-                OutlinedButton(onClick = { bt("Disconnect") { link.disconnect() } }) { Text("Disconnect") }
-                OutlinedButton(onClick = { bt("Listen") { if (link.listening) link.stopListening() else link.startListening() } }) {
-                    Text(if (link.listening) "Stop GarminLink" else "Listen (GarminLink)")
+            if (State.cable) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = { usb("Pick drive") { drive(ask = true) } }) {
+                        Text(State.drive?.let { "nüvi drive: $it" } ?: "Pick nüvi drive…")
+                    }
+                    TextButton(onClick = {
+                        usb("Remove") {
+                            val tree = drive() ?: return@usb
+                            val gone = withContext(Dispatchers.IO) { removeCableFile(this@MainActivity, tree) }
+                            State.log(if (gone) "Removed Garmin/GPX/$CABLE_FILE." else "There's no $CABLE_FILE on the nüvi.")
+                        }
+                    }) { Text("Remove $CABLE_FILE") }
+                    if (busy) Text(" …")
                 }
-                OutlinedButton(onClick = { bt("Ping") { link.ping(dev ?: error("Pick the nüvi first")) } }) { Text("Ping") }
+                Text("Plug the nüvi in with a USB OTG cable. Send writes the place, or the ticked places as a route, " +
+                    "to Garmin/GPX/$CABLE_FILE. The nüvi adds them to Saved and Trip Planner when it next starts.",
+                    style = MaterialTheme.typography.bodySmall)
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = { menu = true }) { Text(dev?.let { "${it.name ?: "?"} (${it.address})" } ?: "Pick nüvi…") }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        if (devs.isEmpty()) DropdownMenuItem(text = { Text("No paired devices (or no Bluetooth permission)") }, onClick = { menu = false })
+                        devs.forEach { d ->
+                            DropdownMenuItem(text = { Text("${d.name ?: "?"}  ${d.address}") }, onClick = {
+                                State.device = d.address; prefs.edit().putString("device", d.address).apply(); menu = false
+                            })
+                        }
+                    }
+                    Text("  ${State.status}${if (busy) " …" else ""}", style = MaterialTheme.typography.bodySmall)
+                }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Button(onClick = { bt("Connect") { link.connect(dev ?: error("Pick the nüvi first")) } }) { Text("Connect") }
+                    OutlinedButton(onClick = { bt("Disconnect") { link.disconnect() } }) { Text("Disconnect") }
+                    OutlinedButton(onClick = { bt("Listen") { if (link.listening) link.stopListening() else link.startListening() } }) {
+                        Text(if (link.listening) "Stop GarminLink" else "Listen (GarminLink)")
+                    }
+                    OutlinedButton(onClick = { bt("Ping") { link.ping(dev ?: error("Pick the nüvi first")) } }) { Text("Ping") }
+                }
             }
             HorizontalDivider()
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -269,16 +351,12 @@ class MainActivity : ComponentActivity() {
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Button(enabled = State.places.isNotEmpty(), onClick = {
-                    scope.launch {
-                        State.log("Plug the nüvi in by USB (OTG) and pick its drive (or its Garmin folder).")
-                        val d = CompletableDeferred<Uri?>().also { pendingTree = it }
-                        treePicker.launch(prefs.getString("usbTree", null)?.let(Uri::parse))
-                        val tree = d.await() ?: return@launch
-                        prefs.edit().putString("usbTree", tree.toString()).apply()
+                    usb("USB install") {
+                        val tree = drive() ?: return@usb
                         val ps = chosen()
-                        withContext(Dispatchers.IO) { runCatching { installGpis(this@MainActivity, tree, ps, category.ifBlank { "NaviLink" }) } }
-                            .onSuccess { files -> files.forEach { State.log("Wrote $it") }; State.log("Done. Eject the nüvi before unplugging; the POIs are under Custom POIs in Where To?.") }
-                            .onFailure { State.log("USB install failed: ${it.message}") }
+                        val files = withContext(Dispatchers.IO) { installGpis(this@MainActivity, tree, ps, category.ifBlank { "NaviLink" }) }
+                        files.forEach { State.log("Wrote $it") }
+                        State.log("Done. Eject the nüvi before unplugging; the POIs are under Custom POIs in Where To?.")
                     }
                 }) { Text(if (State.selected.isEmpty()) "Install all as POIs (USB)" else "Install ${State.selected.size} as POIs (USB)") }
                 OutlinedButton(enabled = State.places.isNotEmpty(), onClick = {

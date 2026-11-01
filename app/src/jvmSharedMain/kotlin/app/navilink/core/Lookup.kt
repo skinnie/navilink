@@ -8,7 +8,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-const val USER_AGENT = "NaviLink/0.1.1 (+https://github.com/skinnie/navilink)"
+const val USER_AGENT = "NaviLink/0.2.0 (+https://github.com/skinnie/navilink)"
 
 // ------------------------------------------------------------------ OpenStreetMap geocoding
 

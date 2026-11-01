@@ -86,10 +86,35 @@ save-locations  recent  saved  type  true  replace
 There is no `route-share`, so a 34xx can't receive GPX or GPI files over Bluetooth. Bulk POIs have to
 go over USB, as a `.gpi` file in `Garmin/POI`.
 
+## By cable
+
+Over USB the nüvi is a plain drive (mass-storage mode). Its firmware describes one input data type in
+`Garmin/GarminDevice.xml`: `GPSData`, `InputToUnit`, folder `GPX`, extension `.gpx`. It looks for
+GPX files in `/Garmin/GPX/` and in the SD card's GPX folder when it starts, the way Garmin BaseCamp's
+"Send to device" works. Waypoints become saved places; routes become trips.
+
+`Current.gpx`, `Position.gpx` and `Archive/` in that folder are the nüvi's own files (track log, last
+position); don't write those.
+
+The firmware knows these Garmin GPX extension tags (`http://www.garmin.com/xmlschemas/GpxExtensions/v3`):
+
+```
+gpxx:WaypointExtension  gpxx:Categories  gpxx:Category  gpxx:Address  gpxx:StreetAddress
+gpxx:City  gpxx:State  gpxx:Country  gpxx:PostalCode  gpxx:PhoneNumber  gpxx:Proximity
+gpxx:DisplayMode  gpxx:RouteExtension  gpxx:IsAutoNamed  gpxx:DisplayColor
+gpxx:RoutePointExtension  gpxx:rpt  gpxx:Subclass
+```
+
+NaviLink writes `Garmin/GPX/NaviLink.gpx`: one `<wpt>` per saved place, with name, address, phone
+and category in a `gpxx:WaypointExtension`, and one `<rte>` per route. Route stops are plain
+`<rtept>`s without `gpxx:rpt` shaping points, so the nüvi calculates the roads between them.
+
 ## Open questions
 
 - Does the nüvi accept `/new-route` straight away, or only after it has sent `/auth-info` and got an answer?
   NaviLink can do both: **Connect + Send**, or **Listen**, let the nüvi connect, then **Send**.
 - What the nüvi shows for a multi-stop `/new-route`, and how many stops it takes.
+- By cable: whether routes show up in Trip Planner with all their stops, and whether the nüvi
+  adds the places from `NaviLink.gpx` again on every start.
 
 Please open an issue with NaviLink's log if you try it on a nüvi.

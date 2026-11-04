@@ -1,0 +1,107 @@
+# Garmin POI type -> Find menu category and subcategory, for every POI type the clean style makes.
+# Tab separated: type, category, subcategory. Readers (bbnav search, NaviLink) can group POIs with it;
+# the same codes are used by Garmin's own maps, so it also fits other mkgmap-built maps.
+0x2a00	Food & Drink	Restaurant
+0x2a01	Food & Drink	American
+0x2a02	Food & Drink	Asian
+0x2a03	Food & Drink	Barbecue
+0x2a04	Food & Drink	Chinese
+0x2a05	Food & Drink	Deli/Bakery
+0x2a06	Food & Drink	International
+0x2a07	Food & Drink	Fast Food
+0x2a08	Food & Drink	Italian
+0x2a09	Food & Drink	Mexican
+0x2a0a	Food & Drink	Pizza
+0x2a0b	Food & Drink	Seafood
+0x2a0c	Food & Drink	Steak/Grill
+0x2a0d	Food & Drink	Bagel/Donut
+0x2a0e	Food & Drink	Cafe
+0x2a0f	Food & Drink	French
+0x2a10	Food & Drink	German
+0x2a11	Food & Drink	British Isles
+0x2a13	Food & Drink	Other
+0x2b01	Lodging	Hotel/Motel
+0x2b02	Lodging	Bed & Breakfast/Inn
+0x2b03	Lodging	Campground
+0x2b04	Lodging	Resort
+0x2c01	Attractions	Amusement Park
+0x2c02	Attractions	Museum/Historical
+0x2c03	Attractions	Library
+0x2c04	Attractions	Landmark
+0x2c05	Attractions	School
+0x2c06	Attractions	Park/Garden
+0x2c07	Attractions	Zoo/Aquarium
+0x2c08	Attractions	Arena/Track
+0x2c09	Attractions	Hall/Auditorium
+0x2c0a	Attractions	Winery
+0x2c0b	Attractions	Place of Worship
+0x2c0c	Attractions	Hot Spring
+0x2d01	Entertainment	Theater
+0x2d02	Entertainment	Bar/Nightclub
+0x2d03	Entertainment	Cinema
+0x2d04	Entertainment	Casino
+0x2d05	Entertainment	Golf Course
+0x2d06	Entertainment	Skiing
+0x2d07	Entertainment	Bowling
+0x2d08	Entertainment	Ice Skating
+0x2d09	Entertainment	Swimming Pool
+0x2d0a	Entertainment	Sports/Fitness
+0x2e01	Shopping	Department Store
+0x2e02	Shopping	Grocery
+0x2e03	Shopping	General Merchandise
+0x2e04	Shopping	Shopping Center
+0x2e05	Shopping	Pharmacy
+0x2e06	Shopping	Convenience
+0x2e07	Shopping	Apparel
+0x2e08	Shopping	House & Garden
+0x2e09	Shopping	Home Furnishings
+0x2e0a	Shopping	Specialty Retail
+0x2e0b	Shopping	Computers/Electronics
+0x2e0c	Shopping	Other
+0x2f01	Services	Fuel
+0x2f02	Services	Rental
+0x2f03	Services	Auto Repair
+0x2f04	Services	Airport
+0x2f05	Services	Post Office
+0x2f06	Services	Bank/ATM
+0x2f07	Services	Car Dealer
+0x2f08	Services	Station
+0x2f09	Services	Marina
+0x2f0b	Services	Parking
+0x2f0c	Services	Toilets/Rest Area
+0x2f0e	Services	Car Wash
+0x2f10	Services	Personal Care/Health
+0x2f13	Services	Bike Shop/Repair
+0x2f14	Services	Social Services
+0x2f17	Services	Transit Stop
+0x3001	Community	Police
+0x3002	Community	Hospital
+0x3003	Community	City Hall
+0x3004	Community	Court House
+0x3005	Community	Community Center
+0x3006	Community	Border Crossing
+0x3007	Community	Government Office
+0x3008	Community	Fire Station
+0x2000	Roads	Exit
+0x4a00	Outdoors	Picnic Area
+0x4c00	Outdoors	Tourist Information
+0x5000	Outdoors	Drinking Water
+0x6403	Outdoors	Cemetery
+0x6411	Outdoors	Tower
+0x6503	Outdoors	Bay
+0x6508	Outdoors	Waterfall
+0x6511	Outdoors	Spring
+0x650c	Outdoors	Island
+0x6601	Outdoors	Cave
+0x6604	Outdoors	Beach
+0x6606	Outdoors	Cape
+0x6616	Outdoors	Summit
+0x6617	Outdoors	Pass
+0x0100	Cities	City (over 1 million)
+0x0300	Cities	City (over 400,000)
+0x0600	Cities	City (over 100,000)
+0x0700	Cities	Town (over 20,000)
+0x0800	Cities	City
+0x0900	Cities	Town (over 5,000)
+0x0a00	Cities	Town/Suburb
+0x0b00	Cities	Village/Hamlet

@@ -1,0 +1,2 @@
+# Trunk roads are often closed to bicycles without a tag saying so: keep bikes off unless allowed.
+(highway=trunk | highway=trunk_link) & bicycle!=yes & bicycle!=designated & bicycle!=permissive {set bicycle=no}

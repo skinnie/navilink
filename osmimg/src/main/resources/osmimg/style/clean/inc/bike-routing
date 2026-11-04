@@ -1,0 +1,13 @@
+# Car access becomes bicycle access: where a bicycle may go, the "car" may go, and nowhere else.
+mkgmap:bicycle=* {set mkgmap:car='${mkgmap:bicycle}'}
+mkgmap:bicycle!=* {delete mkgmap:car}
+
+# Car speed limits mean nothing here; speeds below are the bike preference (higher = preferred).
+highway=* {delete mkgmap:road-speed-max}
+highway=cycleway | mkgmap:bicycle=designated {set mkgmap:road-speed-class=3}
+highway=* & mkgmap:road-speed-class!=* & (cycleway=lane | cycleway=track | cycleway:both=lane | cycleway:both=track |
+    cycleway:right=lane | cycleway:right=track | cycleway:left=lane | cycleway:left=track) {set mkgmap:road-speed-class=2}
+(highway=trunk | highway=trunk_link | highway=primary | highway=primary_link | highway=secondary | highway=secondary_link)
+    & mkgmap:road-speed-class!=* {set mkgmap:road-speed-class=1}
+(highway=track | highway=path | highway=bridleway) & mkgmap:unpaved=1 & mkgmap:road-speed-class!=* {set mkgmap:road-speed-class=1}
+highway=* & route!=ferry & mkgmap:road-speed-class!=* {set mkgmap:road-speed-class=2}

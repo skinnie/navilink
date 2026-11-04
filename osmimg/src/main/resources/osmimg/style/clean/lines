@@ -1,0 +1,14 @@
+# Roads come from mkgmap's default style. With --style-option=bike the routing data is changed so
+# that a unit routing in car mode (276C, nüvi and other units without a bicycle profile) follows
+# roads a bicycle may use, and prefers cycleways and quiet streets.
+
+if (mkgmap:option:bike=true) then
+include 'inc/bike-tags';
+end
+
+include 'lines' from default;
+
+# From here on we are in the default style's <finalize> section, after its access rules.
+if (mkgmap:option:bike=true) then
+include 'inc/bike-routing';
+end

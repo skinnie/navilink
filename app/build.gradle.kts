@@ -28,11 +28,22 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.material3)
             implementation(compose.ui)
+            implementation("org.jetbrains.compose.material:material-icons-core:1.7.3")
         }
         androidMain.dependencies {
             implementation("androidx.activity:activity-compose:1.10.1")
             implementation("androidx.documentfile:documentfile:1.1.0")
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+        }
+        val jvmSharedMain by getting {
+            dependencies { implementation(project(":osmimg")) }
+        }
+        val desktopMain by getting {
+            dependencies {
+                implementation(compose.desktop.currentOs)
+                implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
+            }
         }
         val desktopTest by getting {
             dependencies { implementation(kotlin("test")) }
@@ -57,6 +68,23 @@ android {
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 
+// Desktop window: building and installing Garmin maps (needs a PC: mkgmap wants desktop Java and ~2 GB).
+compose.desktop {
+    application {
+        mainClass = "app.navilink.desktop.MainKt"
+        nativeDistributions {
+            targetFormats(
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Deb,
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi,
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Dmg,
+            )
+            packageName = "NaviLink"
+            packageVersion = "1.0.0" // installers need MAJOR > 0
+            modules("java.xml")
+        }
+    }
+}
+
 tasks.withType<Test>().configureEach {
-    listOf("nl.gpi").forEach { k -> project.findProperty(k)?.let { systemProperty(k, it) } }
+    listOf("nl.gpi", "nl.shots").forEach { k -> project.findProperty(k)?.let { systemProperty(k, it) } }
 }

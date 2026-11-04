@@ -1,0 +1,197 @@
+# Clean POIs: one Garmin Find category per place, a name on everything that shows in a list.
+#
+# Garmin's Find menu groups POIs by type code:
+#   0x2a Food & Drink    0x2b Lodging        0x2c Attractions     0x2d Entertainment
+#   0x2e Shopping        0x2f Services/Auto  0x30 Community/Emergency
+# Left out on purpose: barriers, benches, post boxes, phones, recycling, vending, unnamed shops,
+# unnamed pitches and memorials. They fill the lists and hide what you are looking for.
+
+addr:housenumber=* {set mkgmap:execute_finalize_rules=true}
+
+# --- Barriers on roads: no POI, but their access limits reach the routing (--link-pois-to-ways).
+barrier=* & bicycle=*   {set mkgmap:bicycle='${bicycle|subst:private=>no}'}
+barrier=* & foot=*      {set mkgmap:foot='${foot|subst:private=>no}'}
+barrier=* & motorcar=*  {set mkgmap:car='${motorcar|subst:private=>no}'}
+barrier=* & motor_vehicle=* {add mkgmap:car='${motor_vehicle|subst:private=>no}'}
+barrier=bollard | barrier=block | barrier=bus_trap {
+    add mkgmap:car=no; add mkgmap:delivery=no; add mkgmap:truck=no;
+    add mkgmap:bus=no; add mkgmap:taxi=no; add mkgmap:emergency=no;
+    }
+barrier=cycle_barrier | barrier=kissing_gate | barrier=stile | barrier=turnstile {
+    add mkgmap:car=no; add mkgmap:delivery=no; add mkgmap:truck=no;
+    add mkgmap:bus=no; add mkgmap:taxi=no; add mkgmap:emergency=no;
+    set mkgmap:road-speed=0;
+    }
+barrier=stile | barrier=kissing_gate {add mkgmap:bicycle=no}
+barrier=gate | barrier=lift_gate | barrier=swing_gate {set mkgmap:road-speed=0}
+barrier=* & access=* {addaccess '${access|subst:private=>no}'}
+
+# --- Names: the name, else the brand ("Galp", "Pingo Doce"), else the operator.
+name ~ '(?i)fix[ _]?me' {delete name}
+brand ~ '(?i)fix[ _]?me' {delete brand}
+operator ~ '(?i)fix[ _]?me' {delete operator}
+name!=* & brand=* {set name='${brand}'}
+name!=* & operator=* {set name='${operator}'}
+
+# --- Towns and cities
+place=city & population > 999999 & name=* [0x0100 resolution 12]
+place=city & population > 399999 & name=* [0x0300 resolution 15]
+place=city & population >  99999 & name=* [0x0600 resolution 17]
+place=city & name=*                       [0x0800 resolution 18]
+place=town & population >  19999 & name=* [0x0700 resolution 18]
+place=town & population >   4999 & name=* [0x0900 resolution 19]
+place=town & name=*                       [0x0a00 resolution 19]
+place=village & name=*                    [0x0b00 resolution 22]
+place=suburb & name=*                     [0x0a00 resolution 22]
+place=hamlet & name=*                     [0x0b00 resolution 24]
+(place=island | place=islet) & name=*     [0x650c resolution 20]
+
+highway=motorway_junction & (ref=* | exit_to=* | name=*)
+    {name '${ref} ${exit_to}' | '${ref} ${destination}' | '${ref}' | '${name}'} [0x2000 resolution 22]
+
+# --- 0x30 Community and emergency (first: a hospital with a cafe is still a hospital)
+amenity=police                                [0x3001 resolution 24 default_name 'Police']
+amenity=hospital | healthcare=hospital        [0x3002 resolution 22 default_name 'Hospital']
+(amenity=clinic | healthcare=clinic) & name=* [0x3002 resolution 24]
+amenity=townhall & name=*                     [0x3003 resolution 24]
+amenity=courthouse & name=*                   [0x3004 resolution 24]
+(amenity=community_centre | amenity=community_center) & name=* [0x3005 resolution 24]
+amenity=border_control | barrier=border_control [0x3006 resolution 20 default_name 'Border']
+(office=government | amenity=public_building) & name=* [0x3007 resolution 24]
+amenity=embassy & name=*                      [0x3007 resolution 24]
+amenity=fire_station                          [0x3008 resolution 24 default_name 'Fire station']
+
+# --- 0x2b Lodging (before food: a hotel restaurant shows under both)
+(tourism=hotel | tourism=motel) & name=* & amenity=restaurant [0x2b01 resolution 24 continue with_actions]
+(tourism=hotel | tourism=motel) & name=* & amenity!=restaurant [0x2b01 resolution 24]
+(tourism=guest_house | tourism=bed_and_breakfast | tourism=hostel | tourism=apartment | tourism=chalet) & name=*
+    [0x2b02 resolution 24]
+(tourism=alpine_hut | tourism=wilderness_hut) [0x2b02 resolution 24 default_name 'Hut']
+(tourism=camp_site | tourism=caravan_site) & access!=private [0x2b03 resolution 24 default_name 'Campsite']
+tourism=resort & name=* [0x2b04 resolution 24]
+
+# --- 0x2a Food and drink. Search by cuisine: 2a01 American ... 2a13 Other, 2a00 any restaurant.
+amenity=cafe | amenity=ice_cream | shop=ice_cream | shop=coffee [0x2a0e resolution 24 default_name 'Cafe']
+(shop=bakery | shop=pastry | shop=confectionery | shop=deli) & name=* [0x2a05 resolution 24]
+amenity=food_court & name=* [0x2a13 resolution 24]
+amenity=fast_food & cuisine ~ '(?i).*pizza.*' & name=* [0x2a0a resolution 24]
+amenity=fast_food & name=* [0x2a07 resolution 24]
+
+amenity=restaurant & name=* {set tmp:food=yes}
+tmp:food=yes & cuisine ~ '(?i).*pizza.*'                                    [0x2a0a resolution 24]
+tmp:food=yes & cuisine ~ '(?i).*(italian|pasta).*'                          [0x2a08 resolution 24]
+tmp:food=yes & cuisine ~ '(?i).*(chinese|vietnamese|cantonese).*'           [0x2a04 resolution 24]
+tmp:food=yes & cuisine ~ '(?i).*(asian|japanese|sushi|thai|indian|curry|korean|nepalese|indonesian|ramen|noodle).*'
+    [0x2a02 resolution 24]
+tmp:food=yes & cuisine ~ '(?i).*(seafood|fish|marisqueira).*'               [0x2a0b resolution 24]
+tmp:food=yes & cuisine ~ '(?i).*(steak|grill|churrasco|brazilian|argentin).*' [0x2a0c resolution 24]
+tmp:food=yes & cuisine ~ '(?i).*(barbecue|bbq|chicken|frango).*'            [0x2a03 resolution 24]
+tmp:food=yes & cuisine ~ '(?i).*(american|burger|diner).*'                  [0x2a01 resolution 24]
+tmp:food=yes & cuisine ~ '(?i).*(mexican|tex-mex).*'                        [0x2a09 resolution 24]
+tmp:food=yes & cuisine ~ '(?i).*(french).*'                                 [0x2a0f resolution 24]
+tmp:food=yes & cuisine ~ '(?i).*(german|bavarian|austrian).*'               [0x2a10 resolution 24]
+tmp:food=yes & cuisine ~ '(?i).*(british|irish|fish_and_chips).*'           [0x2a11 resolution 24]
+tmp:food=yes & cuisine ~ '(?i).*(sandwich|deli|bagel).*'                    [0x2a05 resolution 24]
+tmp:food=yes & cuisine ~ '(?i).*(donut|crepe|cake|dessert).*'               [0x2a0d resolution 24]
+tmp:food=yes & cuisine ~ '(?i).*(international|mediterranean|spanish|tapas|greek|turkish|lebanese|arab|kebab|middle_eastern|african|fusion).*'
+    [0x2a06 resolution 24]
+tmp:food=yes & (cuisine!=* | cuisine ~ '(?i).*(regional|local|portuguese|traditional).*') [0x2a00 resolution 24]
+tmp:food=yes [0x2a13 resolution 24]
+
+# --- 0x2d Entertainment
+amenity=theatre & name=*                            [0x2d01 resolution 24]
+(amenity=bar | amenity=pub | amenity=biergarten | amenity=nightclub) & name=* [0x2d02 resolution 24]
+amenity=cinema & name=*                             [0x2d03 resolution 24]
+amenity=casino & name=*                             [0x2d04 resolution 24]
+leisure=golf_course & name=*                        [0x2d05 resolution 24]
+(landuse=winter_sports | sport=skiing) & name=*     [0x2d06 resolution 24]
+(leisure=bowling_alley | sport=10pin | sport=9pin) & name=* [0x2d07 resolution 24]
+leisure=ice_rink & name=*                           [0x2d08 resolution 24]
+(leisure=water_park | leisure=swimming_pool | amenity=swimming_pool) & access!=private & access!=no & name=*
+    [0x2d09 resolution 24]
+(leisure=sports_centre | leisure=sports_center | leisure=fitness_centre) & name=* [0x2d0a resolution 24]
+
+# --- 0x2c Attractions
+tourism=theme_park & name=*                                 [0x2c01 resolution 24]
+(tourism=museum | historic=museum) & name=*                 [0x2c02 resolution 24]
+historic=castle | historic=fort                             [0x2c02 resolution 22 default_name 'Castle']
+(historic=monument | historic=ruins | historic=archaeological_site | historic=memorial | historic=monastery
+    | historic=city_gate | historic=manor | historic=palace) & name=* [0x2c02 resolution 24]
+amenity=library & name=*                                    [0x2c03 resolution 24]
+tourism=viewpoint                                           [0x2c04 resolution 24 default_name 'Viewpoint']
+(tourism=attraction | tourism=artwork | man_made=lighthouse | historic=*) & name=* [0x2c04 resolution 24]
+(amenity=school | amenity=college | amenity=university | amenity=kindergarten) & name=* [0x2c05 resolution 24]
+(leisure=park | leisure=garden | leisure=nature_reserve | boundary=national_park | leisure=playground) & name=*
+    [0x2c06 resolution 24]
+(tourism=zoo | tourism=aquarium | amenity=zoo) & name=*     [0x2c07 resolution 24]
+(leisure=stadium | leisure=track | leisure=sports_hall | (leisure=pitch & access!=private)) & name=*
+    [0x2c08 resolution 24]
+(amenity=arts_centre | amenity=concert_hall | amenity=conference_centre | amenity=exhibition_centre) & name=*
+    [0x2c09 resolution 24]
+(craft=winery | tourism=wine_cellar | shop=winery) & name=* [0x2c0a resolution 24]
+amenity=place_of_worship & name=*                           [0x2c0b resolution 24]
+natural=hot_spring                                          [0x2c0c resolution 24 default_name 'Hot spring']
+
+# --- 0x2f Services and auto
+amenity=fuel                         [0x2f01 resolution 24 default_name 'Fuel']
+amenity=charging_station {name 'EV ${name}' | 'EV charging'} [0x2f01 resolution 24]
+(amenity=car_rental | amenity=car_sharing | amenity=bicycle_rental) & name=* [0x2f02 resolution 24]
+(shop=car_repair | shop=tyres | shop=tires | shop=car_parts | craft=car_repair) & name=* [0x2f03 resolution 24]
+(aeroway=aerodrome | aeroway=airport) & name=* & (iata=* | icao=* | aerodrome:type=international | aerodrome:type=public | aerodrome=international)
+    [0x2f04 resolution 20]
+amenity=post_office                  [0x2f05 resolution 24 default_name 'Post office']
+amenity=bank & name=*                [0x2f06 resolution 24]
+amenity=atm                          [0x2f06 resolution 24 default_name 'ATM']
+(shop=car | shop=motorcycle) & name=* [0x2f07 resolution 24]
+(railway=station | railway=halt | public_transport=station) & name=* & station!=subway & (railway=* | train=yes)
+    [0x2f08 resolution 22]
+(amenity=bus_station | amenity=ferry_terminal | public_transport=station) & name=* [0x2f08 resolution 23]
+leisure=marina & name=*              [0x2f09 resolution 24]
+amenity=parking & access!=private & access!=no & access!=customers & (name=* | parking=multi-storey | parking=underground)
+    [0x2f0b resolution 24 default_name 'Parking']
+amenity=toilets & access!=private & access!=no [0x2f0c resolution 24 default_name 'Toilets']
+highway=rest_area | highway=services [0x2f0c resolution 22 default_name 'Rest area']
+amenity=car_wash & name=*            [0x2f0e resolution 24]
+(shop=hairdresser | shop=beauty | amenity=dentist | amenity=doctors) & name=* [0x2f10 resolution 24]
+(shop=bicycle | amenity=bicycle_repair_station) [0x2f13 resolution 24 default_name 'Bike repair']
+(amenity=nursing_home | amenity=social_facility) & name=* [0x2f14 resolution 24]
+amenity=drinking_water | (man_made=water_tap & drinking_water=yes) [0x5000 resolution 24 default_name 'Water']
+
+if (mkgmap:option:transit=true) then
+(highway=bus_stop | railway=tram_stop | (public_transport=platform & bus=yes)) & name=* [0x2f17 resolution 24]
+end
+
+# --- 0x2e Shopping
+shop=department_store & name=*                                     [0x2e01 resolution 24]
+(shop=supermarket | shop=greengrocer | shop=butcher | shop=seafood | shop=farm | amenity=marketplace) & name=*
+    [0x2e02 resolution 24]
+(shop=general | shop=variety_store | shop=discount) & name=*       [0x2e03 resolution 24]
+shop=mall & name=*                                                 [0x2e04 resolution 24]
+amenity=pharmacy | shop=chemist & name=*                           [0x2e05 resolution 24 default_name 'Pharmacy']
+(shop=convenience | shop=kiosk | shop=newsagent) & name=*          [0x2e06 resolution 24]
+(shop=clothes | shop=shoes | shop=fashion | shop=boutique | shop=bag | shop=jewelry) & name=* [0x2e07 resolution 24]
+(shop=garden_centre | shop=doityourself | shop=hardware | shop=trade) & name=* [0x2e08 resolution 24]
+(shop=furniture | shop=interior_decoration | shop=kitchen | shop=bed | shop=houseware) & name=* [0x2e09 resolution 24]
+(shop=computer | shop=electronics | shop=mobile_phone | shop=hifi) & name=* [0x2e0b resolution 24]
+(shop=books | shop=gift | shop=sports | shop=outdoor | shop=florist | shop=toys | shop=music | shop=alcohol
+    | shop=wine | shop=optician | shop=photo | shop=stationery | shop=pet | shop=tobacco) & name=* [0x2e0a resolution 24]
+shop=* & shop!=no & shop!=vacant & name=* [0x2e0c resolution 24]
+
+# --- Outdoors and landmarks (map symbols; most units list them under "Geographic points")
+natural=peak {name '${name|def:}${ele|height:m=>ft|def:}'} [0x6616 resolution 22]
+natural=volcano & name=*             [0x6616 resolution 22]
+natural=saddle & name=*              [0x6617 resolution 24]
+natural=cave_entrance                [0x6601 resolution 24 default_name 'Cave']
+natural=spring & name=*              [0x6511 resolution 24]
+natural=waterfall | waterway=waterfall [0x6508 resolution 24 default_name 'Waterfall']
+natural=beach & name=*               [0x6604 resolution 22]
+natural=cape & name=*                [0x6606 resolution 22]
+natural=bay & name=*                 [0x6503 resolution 20]
+tourism=picnic_site                  [0x4a00 resolution 24 default_name 'Picnic']
+tourism=information & information=office [0x4c00 resolution 24 default_name 'Tourist info']
+(landuse=cemetery | amenity=grave_yard) & name=* [0x6403 resolution 24]
+(man_made=tower & tower:type=observation) & name=* [0x6411 resolution 24]
+
+<finalize>
+name=* {name '${name}'}
+include 'inc/address' from default;

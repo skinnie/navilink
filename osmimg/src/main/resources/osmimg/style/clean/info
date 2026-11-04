@@ -1,0 +1,8 @@
+summary: osmimg clean POIs
+version=1
+description {
+Points of interest sorted into the Garmin Find categories, without the clutter
+(gates, benches, post boxes, unnamed shops). Roads, areas, turn restrictions and
+address search come from mkgmap's built-in default style.
+Style options: bike (car mode routes like a bicycle), transit (bus and tram stops).
+}

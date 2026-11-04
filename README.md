@@ -1,18 +1,20 @@
 # NaviLink
 
 Send places from Google Maps to a Garmin nüvi over Bluetooth or a USB cable, and put your own
-POIs on it, without Garmin Smartphone Link. An Android app.
+POIs and OpenStreetMap maps on it, without Garmin Smartphone Link. An Android app, with a desktop
+version for building maps.
 
 <p><img src="docs/tablet.png" alt="NaviLink on a tablet in cable mode: the Bluetooth/Cable switch, buttons and the log on the left, three places around Leiria on the right, two of them ticked to send as a route"></p>
 
 Built for the **nüvi 3490 on firmware 8.50**, including nüvi 3790/3760/3750 units converted to a 3490.
 Other nüvis that work with Smartphone Link on Android probably speak the same protocol, but haven't been tried.
 
-> **Status: early test version.** The POI files are checked byte for byte against gpsbabel.
-> Sending over Bluetooth follows Smartphone Link's protocol exactly, and sending by cable writes the
-> same kind of GPX file Garmin BaseCamp does, but **neither has been tried on a real nüvi yet**.
-> If you try it, please [open an issue](https://github.com/skinnie/navilink/issues) with the app's log,
-> whether it worked or not.
+> **Status: early test version, not yet tried on a real nüvi.** The owner is away from his devices
+> for now, so everything has only been tested against fake nüvi folders and file-format checks:
+> the POI files are checked byte for byte against gpsbabel, Bluetooth follows Smartphone Link's
+> protocol exactly, the cable writes the same kind of GPX file Garmin BaseCamp does, and maps are
+> installed as standard `gmapsupp.img` files. **Feedback is appreciated:** if you try it, please
+> [open an issue](https://github.com/skinnie/navilink/issues) with the app's log, whether it worked or not.
 
 ## Why
 

@@ -23,8 +23,17 @@ jobs:
       # gpsbabel lets the tests compare our .gpi files with its own.
       - run: sudo apt-get update && sudo apt-get install -y gpsbabel
       - run: ./gradlew :app:desktopTest
-      # Debug-signed, so it installs straight away ("install unknown apps" must be allowed).
+      # Signed with NaviLink's fixed key (repo secrets), so each release installs over the last.
+      # Pull requests from forks don't get the secrets and fall back to a throwaway debug key.
+      - name: Signing key
+        env: { NL_KEYSTORE_B64: "${{ secrets.NL_KEYSTORE_B64 }}" }
+        run: |
+          if [ -n "$NL_KEYSTORE_B64" ]; then
+            echo "$NL_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/navilink.keystore"
+            echo "NL_KEYSTORE=$RUNNER_TEMP/navilink.keystore" >> "$GITHUB_ENV"
+          fi
       - run: ./gradlew :app:assembleDebug
+        env: { NL_KEYSTORE_PASSWORD: "${{ secrets.NL_KEYSTORE_PASSWORD }}" }
       - run: cp app/build/outputs/apk/debug/app-debug.apk NaviLink-android.apk
       - uses: actions/upload-artifact@v4
         with: { name: NaviLink-Android, path: NaviLink-android.apk }

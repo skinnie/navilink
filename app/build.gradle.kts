@@ -1,3 +1,5 @@
+import java.util.Properties
+
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -60,6 +62,21 @@ android {
         targetSdk = 36
         versionCode = 4
         versionName = "0.3.0"
+    }
+    // One fixed key for every build, so a new APK installs over the old one.
+    // Locally: nl.keystore / nl.keystore.password in local.properties. CI: NL_KEYSTORE / NL_KEYSTORE_PASSWORD.
+    // Without either, Android's own debug key is used.
+    val local = Properties().apply { rootProject.file("local.properties").takeIf { it.isFile }?.reader()?.use { load(it) } }
+    val keyFile = (System.getenv("NL_KEYSTORE") ?: local.getProperty("nl.keystore"))?.let { file(it) }?.takeIf { it.isFile }
+    val keyPassword = System.getenv("NL_KEYSTORE_PASSWORD") ?: local.getProperty("nl.keystore.password")
+    if (keyFile != null && keyPassword != null) {
+        val navilink = signingConfigs.create("navilink") {
+            storeFile = keyFile
+            storePassword = keyPassword
+            keyAlias = "navilink"
+            this.keyPassword = keyPassword
+        }
+        buildTypes.getByName("debug").signingConfig = navilink
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

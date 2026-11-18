@@ -27,6 +27,7 @@ most models. NaviLink does the useful parts on its own:
 | Send a Google Maps place to the nüvi | from its own map or search | **share from Google Maps**, a link, coordinates or an address |
 | How it reaches the nüvi | Bluetooth | **Bluetooth or USB cable** |
 | Load your own POIs | — | **.gpi from GPX/GPI lists, installed over USB** |
+| Ready-made POI packs | — | **fuel, LPG, campsites, water… from OpenStreetMap and Foursquare, without doubling what's already on the Garmin** |
 | Get the nüvi's saved places back | kept inside the app | **save as GPX** |
 | Live traffic, weather, Garmin services | yes | no |
 
@@ -96,6 +97,29 @@ The `.gpi` files use the same layout as gpsbabel's (which loads on nüvis) and a
 Windows-1252, so accents are fine; characters outside it (like emoji) become `?`.
 POIs use the nüvi's default icon.
 
+## POI packs (POIs page)
+
+Ready-made POIs for whole countries: fuel stations, LPG, EV chargers, motorhome areas, campsites,
+drinking water, toilets and more from **OpenStreetMap** (© OpenStreetMap contributors, ODbL), and
+restaurants, cafés, hotels, museums and more from **Foursquare Open Source Places** (Apache-2.0).
+Each kind becomes one file, `Garmin/POI/OSM Fuel.gpi` and so on, under **Custom POIs** on the Garmin.
+On a phone, pick the Garmin's drive as for maps; on a PC, the device chosen at the top is used.
+
+Before writing, NaviLink looks at what's already on the Garmin and its memory card, by what's in the
+files rather than their names (those change with every release):
+
+- **POI files** (`.gpi`), such as iOverlander's or your own: a new place within 150 m of a place of
+  the same kind already there is left out (a new fuel station is checked against fuel stations, not
+  against the water tap next door). iOverlander is recognised by its name, copyright and Garmin part
+  number. NaviLink's own files from an earlier run are replaced, not counted.
+- **Map add-ons** (`.img`) that hold POIs, such as City Navigator's Foursquare layer: their places
+  can't be read one by one, so the whole source is left out (no Foursquare places when the
+  Foursquare add-on is there), unless you choose **Add Foursquare anyway**.
+
+Kinds from one source don't knock each other out (a campsite next to a motorhome area stays), but
+Foursquare places are checked against the OpenStreetMap ones of the same kind. Speed cameras can't
+be chosen for France, where warning of their positions is illegal.
+
 ## What it understands
 
 | Input | Example |
@@ -138,7 +162,8 @@ desktop JVM; the Android screens and Bluetooth are in `app/src/androidMain`.
 | `nuvi/GpiWriter.kt` | `.gpi` writer |
 | `nuvi/Files.kt` | GPX/GPI import, GPX export |
 | `nuvi/CableGpx.kt` | the GPX file for sending by cable |
-| `core/` | Google Maps link parsing, GPX and GPI reading (shared with [MapsToTom](https://github.com/skinnie/MapsToTom/tree/kotlin-app/composeApp/src/jvmSharedMain/kotlin/app/mapstotom/core)) |
+| `pois/` | POI packs: OpenStreetMap and Foursquare sources, recognising POI sets already on the Garmin, leaving out what's there |
+| `core/` | Google Maps link parsing, GPX, GPI and Parquet reading (shared with [MapsToTom](https://github.com/skinnie/MapsToTom/tree/kotlin-app/composeApp/src/jvmSharedMain/kotlin/app/mapstotom/core)) |
 | `BtLink.kt` | the two Bluetooth links |
 | `UsbDrive.kt` | the nüvi's drive: POI files and the cable GPX file |
 

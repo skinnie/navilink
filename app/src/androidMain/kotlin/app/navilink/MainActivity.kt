@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import app.navilink.maps.PhoneMapsScreen
 import app.navilink.ui.AppShell
+import app.navilink.pois.asPoiHost
 import app.navilink.ui.NaviTheme
 import app.navilink.ui.PlacesPage
 import app.navilink.ui.PlacesScreen
@@ -55,7 +56,7 @@ object State {
     var device by mutableStateOf<String?>(null) // MAC address
     var cable by mutableStateOf(false)            // send by cable (USB) instead of Bluetooth
     var drive by mutableStateOf<String?>(null)    // name of the nüvi's drive last picked
-    var page by mutableStateOf(0)                 // 0 = places and routes, 1 = maps
+    var page by mutableStateOf(0)                 // 0 = places and routes, 1 = maps, 2 = POIs
 
     fun log(s: String) {
         val t = SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(Date())
@@ -80,6 +81,15 @@ object MapsApp {
         ).also { model = it }
     }
     fun detach(a: MainActivity) { if (host?.activity === a) host?.activity = null }
+
+    private var pois: app.navilink.pois.PoiPacks? = null
+    /** The POIs page's model; it shares the Maps page's drives. */
+    fun pois(a: MainActivity): app.navilink.pois.PoiPacks {
+        get(a)
+        return pois ?: app.navilink.pois.PoiPacks(
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main), host!!.asPoiHost(), log = State::log,
+        ).also { pois = it }
+    }
 }
 
 class MainActivity : ComponentActivity() {
@@ -332,8 +342,11 @@ class MainActivity : ComponentActivity() {
             }
         }
         AppShell(State.page, { State.page = it }, Modifier.safeDrawingPadding()) { mod ->
-            if (State.page == 1) PhoneMapsScreen(MapsApp.get(this@MainActivity), mod)
-            else PlacesScreen(places, mod)
+            when (State.page) {
+                1 -> PhoneMapsScreen(MapsApp.get(this@MainActivity), mod)
+                2 -> app.navilink.pois.PoiPacksScreen(MapsApp.pois(this@MainActivity), mod)
+                else -> PlacesScreen(places, mod)
+            }
         }
     }
 }

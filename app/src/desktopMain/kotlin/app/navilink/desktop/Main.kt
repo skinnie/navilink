@@ -41,7 +41,7 @@ import java.io.File
 import javax.swing.JFileChooser
 
 fun main() = application {
-    Window(onCloseRequest = ::exitApplication, title = "NaviLink Maps",
+    Window(onCloseRequest = ::exitApplication, title = "NaviLink",
         state = rememberWindowState(width = 1280.dp, height = 820.dp)) {
         val scope = rememberCoroutineScope()
         val m = remember { MapsModel(scope) }
@@ -181,10 +181,31 @@ private fun MenuButton(icon: ImageVector, title: String, subtitle: String?, enab
 
 // ---- window ----
 
+/** The POIs page on the PC: the Garmin's drives are the ones chosen in the bar at the top. */
+private class DesktopPoiHost(private val m: MapsModel) : app.navilink.pois.PoiHost {
+    override fun drives() = m.roots.toSortedMap().map { (st, root) ->
+        (if (st == Storage.INTERNAL) "built-in memory" else "memory card") to (FileDriveFs(root) as DriveFs)
+    }
+    override val canPick get() = false
+    override suspend fun pickDrive() = false
+    override fun deviceName() = m.deviceName ?: "Garmin"
+}
+
 @Composable
 fun MapsWindow(m: MapsModel) {
+    val scope = rememberCoroutineScope()
+    val pois = remember { app.navilink.pois.PoiPacks(scope, DesktopPoiHost(m), log = m::say) }
+    var page by remember { mutableStateOf(0) }
+    // A new device or card in the bar: look at its POIs again.
+    LaunchedEffect(m.roots) { if (page == 1) pois.scan() }
     Column(Modifier.fillMaxSize()) {
-        DeviceBar(m)
+        DeviceBar(m, page) { page = it }
+        if (page == 1) {
+            app.navilink.pois.PoiPacksScreen(pois, Modifier.weight(1f).fillMaxWidth().padding(24.dp))
+            if (m.showLog) LogPanel(m, Modifier.fillMaxWidth().height(200.dp))
+            StatusBar(m)
+            return@Column
+        }
         Row(Modifier.weight(1f).padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -209,11 +230,16 @@ private fun driveSub(d: Drive) = "${size(d.freeBytes)} free"
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun DeviceBar(m: MapsModel) {
+fun DeviceBar(m: MapsModel, page: Int = 0, onPage: (Int) -> Unit = {}) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("NaviLink Maps", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(end = 12.dp))
+            Text("NaviLink", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(end = 4.dp))
+            SingleChoiceSegmentedButtonRow(Modifier.width(200.dp).padding(end = 8.dp)) {
+                listOf("Maps", "POIs").forEachIndexed { i, t ->
+                    SegmentedButton(page == i, onClick = { onPage(i) }, shape = SegmentedButtonDefaults.itemShape(i, 2), icon = {}) { Text(t, maxLines = 1) }
+                }
+            }
             val free = m.busy == null
             val maps = m.installed.count { it.path.substringAfterLast('/').lowercase() !in m.profile.systemNames }
             when (val d = m.device) {

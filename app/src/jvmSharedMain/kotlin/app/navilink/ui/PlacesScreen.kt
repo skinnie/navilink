@@ -15,6 +15,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Place
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -84,10 +85,10 @@ val FoldedMap: ImageVector by lazy {
     }.build()
 }
 
-/** The app frame: a title bar and Places / Maps at the bottom (a rail on wide screens). */
+/** The app frame: a title bar and Places / Maps / POIs at the bottom (a rail on wide screens). */
 @Composable
 fun AppShell(page: Int, onPage: (Int) -> Unit, modifier: Modifier = Modifier, content: @Composable (Modifier) -> Unit) {
-    val items = listOf("Places" to Icons.Outlined.Place, "Maps" to FoldedMap)
+    val items = listOf("Places" to Icons.Outlined.Place, "Maps" to FoldedMap, "POIs" to Icons.Outlined.Star)
     BoxWithConstraints(modifier.fillMaxSize().background(navi.background)) {
         if (maxWidth >= 720.dp) Row(Modifier.fillMaxSize()) {
             NavigationRail(Modifier.fillMaxHeight(), containerColor = navi.card, header = { Spacer(Modifier.height(Space.small)) }) {

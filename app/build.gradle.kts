@@ -83,6 +83,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+    // The shared code's data files (Foursquare index) go into the APK too.
+    sourceSets["main"].resources.srcDir("src/jvmSharedMain/resources")
 }
 
 // Desktop window: building and installing Garmin maps (needs a PC: mkgmap wants desktop Java and ~2 GB).
@@ -103,5 +105,5 @@ compose.desktop {
 }
 
 tasks.withType<Test>().configureEach {
-    listOf("nl.gpi", "nl.shots").forEach { k -> project.findProperty(k)?.let { systemProperty(k, it) } }
+    listOf("nl.gpi", "nl.shots", "nl.poisets", "nl.poilive").forEach { k -> project.findProperty(k)?.let { systemProperty(k, it) } }
 }

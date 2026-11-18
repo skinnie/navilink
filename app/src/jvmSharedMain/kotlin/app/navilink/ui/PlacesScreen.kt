@@ -139,7 +139,7 @@ private fun NuviCard(p: PlacesPage) {
                 }
             }
         }
-        Segmented(listOf("Bluetooth", "Cable (USB)"), if (p.cable) 1 else 0, { p.cable = it == 1 }, Modifier.fillMaxWidth())
+        Segmented(listOf("Cable (USB)", "Bluetooth"), if (p.cable) 0 else 1, { p.cable = it == 0 }, Modifier.fillMaxWidth())
         if (p.cable) {
             NestedRow(p.driveName ?: "No drive picked", "Plug the nüvi in with a USB OTG cable.") {
                 TextAction(if (p.driveName == null) "Pick" else "Change", { p.pickDrive() }, enabled = !p.busy)
@@ -147,6 +147,7 @@ private fun NuviCard(p: PlacesPage) {
             Text("Places go to Saved and routes to Trip Planner when the nüvi next starts.",
                 style = MaterialTheme.typography.bodySmall, color = navi.muted)
         } else {
+            Note("Bluetooth hasn't been tried with a real nüvi yet. If it doesn't work, use the cable, and please tell us what the log shows.", Tone.WARN)
             Box {
                 NestedRow(if (p.device == null) "No nüvi picked" else "Paired device",
                     p.device?.let { "${it.first}  ·  ${it.second}" } ?: "Pair it in Android's Bluetooth settings first.") {

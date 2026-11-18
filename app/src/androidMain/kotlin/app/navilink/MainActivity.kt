@@ -54,7 +54,7 @@ object State {
     val log = mutableStateListOf<String>()
     var status by mutableStateOf("Not connected")
     var device by mutableStateOf<String?>(null) // MAC address
-    var cable by mutableStateOf(false)            // send by cable (USB) instead of Bluetooth
+    var cable by mutableStateOf(true)             // send by cable (USB); false = Bluetooth (untested on a real nüvi)
     var drive by mutableStateOf<String?>(null)    // name of the nüvi's drive last picked
     var page by mutableStateOf(0)                 // 0 = places and routes, 1 = maps, 2 = POIs
 
@@ -118,7 +118,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         State.device = State.device ?: prefs.getString("device", null)
-        State.cable = prefs.getBoolean("cable", false)
+        State.cable = prefs.getBoolean("cable", true)
         State.drive = State.drive ?: prefs.getString("usbName", null)
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             perms.launch(arrayOf(Manifest.permission.BLUETOOTH_CONNECT))

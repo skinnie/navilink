@@ -1,10 +1,10 @@
 # NaviLink
 
-Send places from Google Maps to a Garmin nüvi over Bluetooth or a USB cable, and put your own
+Send places from Google Maps to a Garmin nüvi over a USB cable (or Bluetooth, still untested), and put your own
 POIs and OpenStreetMap maps on it, without Garmin Smartphone Link. An Android app, with a desktop
 version for building maps.
 
-<p><img src="docs/tablet.png" alt="NaviLink on a tablet in cable mode: the Bluetooth/Cable switch, buttons and the log on the left, three places around Leiria on the right, two of them ticked to send as a route"></p>
+<p><img src="docs/tablet.png" alt="NaviLink on a tablet in cable mode: the Cable/Bluetooth switch and the nüvi's drive on the left, four places in Portugal on the right, two of them ticked to send as a route"></p>
 
 Built for the **nüvi 3490 on firmware 8.50**, including nüvi 3790/3760/3750 units converted to a 3490.
 Other nüvis that work with Smartphone Link on Android probably speak the same protocol, but haven't been tried.
@@ -25,7 +25,7 @@ most models. NaviLink does the useful parts on its own:
 | | Smartphone Link | NaviLink |
 |---|---|---|
 | Send a Google Maps place to the nüvi | from its own map or search | **share from Google Maps**, a link, coordinates or an address |
-| How it reaches the nüvi | Bluetooth | **Bluetooth or USB cable** |
+| How it reaches the nüvi | Bluetooth | **USB cable**, or Bluetooth (not yet tried on a real nüvi) |
 | Load your own POIs | — | **.gpi from GPX/GPI lists, installed over USB** |
 | Ready-made POI packs | — | **fuel, LPG, campsites, water… from OpenStreetMap and Foursquare, without doubling what's already on the Garmin** |
 | Get the nüvi's saved places back | kept inside the app | **save as GPX** |
@@ -37,9 +37,31 @@ Download `NaviLink-android.apk` from the [Releases page](https://github.com/skin
 and open it on your phone or tablet (Android 8 or newer). Allow "install unknown apps" for your
 browser or file manager when Android asks.
 
-## Send places over Bluetooth
+## Send places by cable (USB)
 
-Leave NaviLink on **Bluetooth** (the switch at the top).
+The default way, and the one to use until Bluetooth has been tried on a real nüvi.
+
+1. Leave NaviLink on **Cable (USB)** (the switch at the top).
+2. Connect the nüvi to the phone or tablet with a USB OTG adapter and wait for Android to show it as a drive.
+3. Press **Send** next to a place to add it to the nüvi's saved places, or tick several and press
+   **Send N as route** for a trip. The first time, pick the nüvi's drive; NaviLink remembers it.
+4. Eject the nüvi and unplug it. When it starts, the places are under **Saved** in *Where To?* and
+   routes are in **Trip Planner**.
+
+NaviLink writes everything it sends into one file, `Garmin/GPX/NaviLink.gpx` (Garmin BaseCamp does
+the same with `temp.gpx`), and adds to it on each send. The nüvi may read the file again every time it
+starts, so once the places are on the nüvi, press **Remove NaviLink.gpx**; otherwise a place you
+delete on the nüvi can come back. The nüvi works out the roads between a route's stops itself.
+Keep routes short until this has been tried: one nüvi 3590 owner saw a 22-stop BaseCamp route arrive
+with 15 stops.
+
+## Send places over Bluetooth (untested)
+
+> **Not yet tried on a real nüvi.** The Bluetooth side follows Smartphone Link's protocol, but no
+> nüvi has answered NaviLink yet. If it doesn't connect, use the
+> cable, and please [open an issue](https://github.com/skinnie/navilink/issues) with the log.
+
+Switch NaviLink to **Bluetooth** (the switch at the top).
 
 1. Pair the nüvi with your phone in Android's Bluetooth settings, the same way as for hands-free calls.
 2. **Force-stop Smartphone Link** if it's installed (*Settings → Apps → Smartphone Link → Force stop*).
@@ -60,24 +82,6 @@ Link does. The log at the bottom shows every message exchanged with the nüvi.
 While NaviLink is listening, anything the nüvi sends to the phone is added to the list: its
 current destination, its parking spot and its saved places. **Save as GPX** keeps them, for example
 as a backup of the nüvi's favourites.
-
-## Send places by cable (USB)
-
-For when Bluetooth won't connect, or to load a trip planned ahead.
-
-1. Switch NaviLink to **Cable (USB)**.
-2. Connect the nüvi to the phone or tablet with a USB OTG adapter and wait for Android to show it as a drive.
-3. Press **Send** next to a place to add it to the nüvi's saved places, or tick several and press
-   **Send N as route** for a trip. The first time, pick the nüvi's drive; NaviLink remembers it.
-4. Eject the nüvi and unplug it. When it starts, the places are under **Saved** in *Where To?* and
-   routes are in **Trip Planner**.
-
-NaviLink writes everything it sends into one file, `Garmin/GPX/NaviLink.gpx` (Garmin BaseCamp does
-the same with `temp.gpx`), and adds to it on each send. The nüvi may read the file again every time it
-starts, so once the places are on the nüvi, press **Remove NaviLink.gpx**; otherwise a place you
-delete on the nüvi can come back. The nüvi works out the roads between a route's stops itself.
-Keep routes short until this has been tried: one nüvi 3590 owner saw a 22-stop BaseCamp route arrive
-with 15 stops.
 
 ## Install POIs (USB)
 

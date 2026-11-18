@@ -154,6 +154,14 @@ class PhoneMapsTest {
                 scene.close()
             }
         }
+        // The README picture: the tablet in cable mode, the default.
+        page.cable = true
+        val scene = ImageComposeScene(1280, 800, Density(1f)) {
+            app.navilink.ui.NaviTheme(false) { app.navilink.ui.AppShell(0, {}) { mod -> app.navilink.ui.PlacesScreen(page, mod) } }
+        }
+        runBlocking { repeat(3) { delay(50); scene.render(it * 100_000_000L) } }
+        File(shots, "places-tablet-cable.png").writeBytes(scene.render(400_000_000L).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+        scene.close()
     }
 
     private data class Quad(val a: String, val b: Int, val c: Int, val d: Float)
@@ -167,7 +175,7 @@ class PhoneMapsTest {
         )
         override val selected = listOf(0, 2)
         override fun select(i: Int, on: Boolean) {}
-        override var cable = false
+        override var cable by mutableStateOf(false)
         override val busy = false
         override val devices = listOf("nüvi 3790" to "00:1C:D7:00:00:01")
         override val device = devices.first()
@@ -179,7 +187,7 @@ class PhoneMapsTest {
         override fun disconnect() {}
         override fun toggleListen() {}
         override fun ping() {}
-        override val driveName: String? = null
+        override val driveName: String? = "NUVI (Garmin)"
         override fun pickDrive() {}
         override fun removeCableFile() {}
         override fun add(text: String) {}

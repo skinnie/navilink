@@ -35,7 +35,7 @@ class BtLink(
     /** The /auth-info answer with the phone identity (see live/Identity.kt). */
     private val creds: (() -> String)? = null,
     private val capture: Capture? = null,
-    /** Called when the nüvi opens or closes its GarminLink session. */
+    /** Called when a link opens or closes: the nüvi's GarminLink session, or our link 1 to it. */
     private val onSession: (Boolean) -> Unit = {},
 ) {
     private val adapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
@@ -59,7 +59,8 @@ class BtLink(
     /** Open the phone -> nüvi link. Tries the normal (secure) socket first, then an insecure one. */
     fun connect(d: BluetoothDevice) {
         disconnect()
-        adapter?.cancelDiscovery()
+        // Needs BLUETOOTH_SCAN on Android 12+, which we do not ask for; we never scan, so nothing is lost.
+        runCatching { adapter?.cancelDiscovery() }
         log("Connecting to ${d.name} (${d.address}) on $NUVI_UUID …")
         val s = try {
             d.createRfcommSocketToServiceRecord(NUVI_UUID).also { it.connect() }
@@ -69,6 +70,7 @@ class BtLink(
         }
         client = s
         log("Connected to ${d.name}.")
+        onSession(true)
         thread(name = "nuvi-reader", isDaemon = true) {
             val input = s.inputStream.buffered()
             try {
@@ -86,6 +88,7 @@ class BtLink(
                 log("Link 1 closed: ${e.message}")
             } finally {
                 if (client === s) client = null
+                onSession(false)
             }
         }
     }
@@ -106,6 +109,7 @@ class BtLink(
     fun disconnect() {
         client?.let { runCatching { it.close() } }
         client = null
+        onSession(false)
     }
 
     /** What SPL does to wake a nüvi: connect, write "ping", close. The nüvi should then connect to GarminLink. */

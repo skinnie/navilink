@@ -54,6 +54,9 @@ class LinkService : Service() {
     private val wake = object : Runnable {
         override fun run() {
             if (!aclUp || Live.link.session != null || pings >= 5) return
+            // Link 1 open means the nüvi is awake; a ping would open a second connection to the same channel,
+            // which Android refuses, and the cleanup closes link 1 (seen with the fake nüvi, 2026-11-19).
+            if (Live.link.connectedTo != null) return
             val d = nuvi() ?: return
             pings++
             Thread { runCatching { Live.link.ping(d) }.onFailure { State.log("Ping failed: ${it.message}") } }.start()

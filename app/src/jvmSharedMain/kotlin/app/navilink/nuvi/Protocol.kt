@@ -36,6 +36,17 @@ data class Place(
     val category: String? = null,
 )
 
+/** Same place: same name (ignoring case and spaces) within about a metre. */
+fun samePlace(a: Place, b: Place): Boolean =
+    a.name.trim().equals(b.name.trim(), ignoreCase = true) && Math.abs(a.lat - b.lat) < 1e-5 && Math.abs(a.lon - b.lon) < 1e-5
+
+/** The places in [incoming] not already in [existing] (nor repeated within [incoming]). */
+fun newPlaces(existing: List<Place>, incoming: List<Place>): List<Place> {
+    val out = ArrayList<Place>()
+    for (p in incoming) if (existing.none { samePlace(it, p) } && out.none { samePlace(it, p) }) out += p
+    return out
+}
+
 private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
 /** One line of a /new-route body, in the same field order SPL uses. */

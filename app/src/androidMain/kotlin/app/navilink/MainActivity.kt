@@ -230,13 +230,20 @@ class MainActivity : ComponentActivity() {
         busy = true
         lifecycleScope.launch {
             runCatching { block() }.onFailure { State.log("$label failed: ${it.message}") }
-            State.status = link.connectedTo?.let { "Connected to $it" } ?: "Not connected"
-            if (link.listening) State.status += " · listening"
+            refresh()
             busy = false
         }
     }
 
     private fun bt(label: String, block: () -> Unit) = job(label) { withContext(Dispatchers.IO) { block() } }
+
+    /** "Connected to …", "nüvi connected (Live Services)", " · listening": what the Bluetooth card shows. */
+    private fun linkState(): String {
+        @Suppress("UNUSED_EXPRESSION") tick; State.liveStatus
+        val s = link.connectedTo?.let { "Connected to $it" }
+            ?: link.session?.let { "Connected to $it (GarminLink)" } ?: "Not connected"
+        return s + if (link.listening) " · listening" else ""
+    }
 
     /** Ticked places, or all of them when none are ticked. */
     private fun chosen() = if (State.selected.isEmpty()) State.places.toList() else State.selected.sorted().mapNotNull { State.places.getOrNull(it) }
@@ -261,9 +268,11 @@ class MainActivity : ComponentActivity() {
         @get:SuppressLint("MissingPermission")
         override val device get() = run { @Suppress("UNUSED_EXPRESSION") tick; currentDevice()?.let { (it.name ?: "?") to it.address } }
         override fun chooseDevice(address: String) { State.device = address; prefs.edit().putString("device", address).apply(); refresh() }
-        override val connected get() = State.status.startsWith("Connected")
-        override val status get() = State.status
-        override val listening get() = State.status.contains("listening")
+        // Read live from the link: either direction counts as connected (the nüvi's GarminLink session is
+        // what Live Services use). tick and State.liveStatus change whenever the link changes, so this redraws.
+        override val connected get() = linkState().let { link.connectedTo != null || link.session != null }
+        override val status get() = linkState()
+        override val listening get() = linkState().let { link.listening }
         override fun connect() = bt("Connect") { link.connect(currentDevice() ?: error("Pick the nüvi first")) }
         override fun disconnect() = bt("Disconnect") { link.disconnect() }
         override fun toggleListen() = bt("Listen") { if (link.listening) link.stopListening() else link.startListening() }

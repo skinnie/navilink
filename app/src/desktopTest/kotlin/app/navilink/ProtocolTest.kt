@@ -48,6 +48,13 @@ class ProtocolTest {
         assertTrue(abs(f.places[0].lat - 39.7436) < 1e-6)
     }
 
+    @Test fun placesFromTheNuviAreNotAddedTwice() {
+        val have = listOf(Place("Castelo de Leiria", 39.7473, -8.8094))
+        val sent = listOf(Place("castelo de leiria ", 39.747301, -8.809401), Place("Sé", 39.7459, -8.8077), Place("Sé", 39.7459, -8.8077))
+        assertEquals(listOf("Sé"), app.navilink.nuvi.newPlaces(have, sent).map { it.name })
+        assertEquals(1, app.navilink.nuvi.newPlaces(have, listOf(Place("Castelo de Leiria", 39.75, -8.81))).size) // different spot
+    }
+
     @Test fun readsResponses() {
         val m = readMessage(ByteArrayInputStream("HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nOK\r\n\r\n".toByteArray()))!!
         assertEquals(200, m.status)

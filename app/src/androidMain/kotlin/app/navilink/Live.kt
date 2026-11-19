@@ -12,6 +12,7 @@ import app.navilink.live.Identity
 import app.navilink.live.LiveRouter
 import app.navilink.live.SocketUpstream
 import app.navilink.live.WeatherSource
+import app.navilink.nuvi.newPlaces
 import java.io.File
 
 /**
@@ -40,8 +41,13 @@ object Live {
         router.weather = runCatching { WeatherSource.valueOf(prefs.getString("weather", "")!!) }.getOrDefault(WeatherSource.GARMIN_THEN_OPEN_METEO)
         link = BtLink(State::log, { route, ps ->
             Handler(Looper.getMainLooper()).post {
-                State.places.addAll(ps)
-                State.log("Added ${ps.size} place(s) from the nüvi ($route).")
+                val fresh = newPlaces(State.places, ps)
+                State.places.addAll(fresh)
+                State.log(when {
+                    fresh.isEmpty() -> "The nüvi sent ${ps.size} place(s) already in the list ($route)."
+                    fresh.size < ps.size -> "Added ${fresh.size} place(s) from the nüvi ($route); ${ps.size - fresh.size} already in the list."
+                    else -> "Added ${ps.size} place(s) from the nüvi ($route)."
+                })
             }
         }, router = router, creds = { identity().authInfoText(System.currentTimeMillis() / 1000, Build.VERSION.RELEASE) },
             capture = capture, onSession = { changed() })

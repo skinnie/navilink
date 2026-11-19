@@ -57,6 +57,7 @@ object State {
     var cable by mutableStateOf(true)             // send by cable (USB); false = Bluetooth (untested on a real nüvi)
     var drive by mutableStateOf<String?>(null)    // name of the nüvi's drive last picked
     var page by mutableStateOf(0)                 // 0 = places and routes, 1 = maps, 2 = POIs
+    var liveStatus by mutableStateOf("Off")         // Live Services line (LinkService)
 
     fun log(s: String) {
         val t = SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(Date())
@@ -93,14 +94,8 @@ object MapsApp {
 }
 
 class MainActivity : ComponentActivity() {
-    private val link by lazy {
-        BtLink(State::log) { route, ps ->
-            android.os.Handler(mainLooper).post {
-                State.places.addAll(ps)
-                State.log("Added ${ps.size} place(s) from the nüvi ($route).")
-            }
-        }
-    }
+    private val link get() = Live.link
+    private val liveTick: () -> Unit = { tick++ }
     private val prefs by lazy { getSharedPreferences("navilink", Context.MODE_PRIVATE) }
 
     private var pendingOpen: CompletableDeferred<Uri?>? = null
@@ -117,18 +112,23 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Live.init(this)
+        Live.listeners += liveTick
         State.device = State.device ?: prefs.getString("device", null)
         State.cable = prefs.getBoolean("cable", true)
         State.drive = State.drive ?: prefs.getString("usbName", null)
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             perms.launch(arrayOf(Manifest.permission.BLUETOOTH_CONNECT))
         }
+        // Live Services were on last time: bring the background link back.
+        if (Live.enabled && !State.cable) runCatching { LinkService.start(this) }
         incoming.trySend(intent)
         category = prefs.getString("category", "NaviLink")!!
         setContent { NaviTheme { Root() } }
     }
 
     override fun onDestroy() {
+        Live.listeners -= liveTick
         MapsApp.detach(this)
         super.onDestroy()
     }
@@ -289,6 +289,33 @@ class MainActivity : ComponentActivity() {
             }
         }
         override fun clear() { State.places.clear(); State.selected.clear() }
+        override val live = object : app.navilink.ui.LiveControls {
+            override val on get() = run { @Suppress("UNUSED_EXPRESSION") tick; Live.enabled }
+            override fun setOn(v: Boolean) {
+                if (v) {
+                    val need = buildList {
+                        if (Build.VERSION.SDK_INT >= 31) add(Manifest.permission.BLUETOOTH_CONNECT)
+                        if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+                    }.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+                    if (need.isNotEmpty()) perms.launch(need.toTypedArray())
+                    runCatching { LinkService.start(this@MainActivity) }.onFailure { State.log("Live Services didn't start: ${it.message}") }
+                } else LinkService.stop(this@MainActivity)
+                tick++
+            }
+            override val status get() = State.liveStatus
+            override val weatherSources = app.navilink.live.WeatherSource.entries.map { it.label }
+            override val weather get() = run { @Suppress("UNUSED_EXPRESSION") tick; Live.weather.ordinal }
+            override fun setWeather(i: Int) { Live.weather = app.navilink.live.WeatherSource.entries[i]; tick++ }
+            override fun shareCaptures() {
+                val files = Live.capture.files()
+                if (files.isEmpty()) { State.log("No link captures yet."); return }
+                // Binder limit is about 1 MB: share the newest 250 000 characters.
+                val text = files.joinToString("\n\n") { "##### ${it.name}\n" + it.readText() }.take(250_000)
+                State.log("Captures are in ${files.first().parent}")
+                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
+                    .putExtra(Intent.EXTRA_SUBJECT, "NaviLink link captures").putExtra(Intent.EXTRA_TEXT, text), "Share link captures"))
+            }
+        }
         override fun send(stops: List<Place>) = when {
             !State.cable -> bt("Send") {
                 if (link.connectedTo == null) link.connect(currentDevice() ?: error("Pick the nüvi first (pair it in Android Bluetooth settings)"))

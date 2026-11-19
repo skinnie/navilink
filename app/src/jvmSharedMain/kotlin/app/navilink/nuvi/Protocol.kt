@@ -77,7 +77,19 @@ fun response(code: Int, text: String): ByteArray =
         .toByteArray(Charsets.ISO_8859_1)
 
 /** A request or response read off the link. For a request, [path] holds the path with its query string. */
-class Message(val startLine: String, val headers: Map<String, String>, val body: String) {
+class Message(
+    val startLine: String,
+    val headers: Map<String, String>,
+    val body: String,
+    /** The body exactly as received (Live Services requests are binary protobuf). */
+    val bodyBytes: ByteArray = body.toByteArray(Charsets.UTF_8),
+    /** Start line, headers and body exactly as received, for relaying. */
+    val raw: ByteArray = ByteArray(0),
+) {
+    val host: String get() = headers.entries.firstOrNull { it.key.equals("Host", true) }?.value?.trim() ?: ""
+    /** Requests for the phone itself use Host "device" or "gps-device"; anything else is meant for the internet. */
+    val forPhone: Boolean get() = host.isEmpty() || host.equals("device", true) || host.equals("gps-device", true)
+    fun header(name: String): String? = headers.entries.firstOrNull { it.key.equals(name, true) }?.value
     val isResponse get() = startLine.startsWith("HTTP", ignoreCase = true)
     val status: Int? get() = if (isResponse) startLine.split(' ').getOrNull(1)?.toIntOrNull() else null
     val path: String get() = startLine.split(' ').getOrNull(1) ?: ""
@@ -104,14 +116,17 @@ fun parseParams(s: String): Map<String, String> = s.split('&').filter { '=' in i
 fun readMessage(input: InputStream): Message? {
     var start: String
     do { start = readLine(input) ?: return null } while (!looksLikeStart(start))
+    val head = StringBuilder(start).append("\r\n")
     val headers = LinkedHashMap<String, String>()
     while (true) {
         val l = readLine(input) ?: break
         if (l.isEmpty()) break
+        head.append(l).append("\r\n")
         val i = l.indexOf(':')
         if (i > 0) headers[l.substring(0, i).trim()] = l.substring(i + 1).trim()
     }
-    val len = headers.entries.firstOrNull { it.key.equals("Content-Length", true) }?.value?.toIntOrNull() ?: 0
+    head.append("\r\n")
+    val len = headers.entries.firstOrNull { it.key.equals("Content-Length", true) }?.value?.trim()?.toIntOrNull() ?: 0
     val buf = ByteArray(len)
     var n = 0
     while (n < len) {
@@ -119,7 +134,9 @@ fun readMessage(input: InputStream): Message? {
         if (r < 0) break
         n += r
     }
-    return Message(start, headers, String(buf, 0, n, Charsets.UTF_8).trim())
+    val body = buf.copyOf(n)
+    val raw = head.toString().toByteArray(Charsets.ISO_8859_1) + body
+    return Message(start, headers, String(body, Charsets.UTF_8).trim(), body, raw)
 }
 
 private fun looksLikeStart(l: String) =
@@ -129,11 +146,11 @@ private fun readLine(input: InputStream): String? {
     val b = ByteArrayOutputStream()
     while (true) {
         val c = input.read()
-        if (c < 0) return if (b.size() == 0) null else b.toString(Charsets.UTF_8.name())
+        if (c < 0) return if (b.size() == 0) null else b.toString(Charsets.ISO_8859_1.name())
         if (c == '\n'.code) break
         if (c != '\r'.code) b.write(c)
     }
-    return b.toString(Charsets.UTF_8.name())
+    return b.toString(Charsets.ISO_8859_1.name())
 }
 
 /** A place the nüvi sent us (/find-destination, /parking-spot or one entry of /save-locations). */
@@ -150,13 +167,16 @@ fun placeFromRecord(r: Map<String, String>, fallbackName: String): Place? {
 /** What the nüvi asked or told us, and the answer we give, mirroring SPL's handlers. */
 class Handled(val reply: ByteArray, val event: String, val places: List<Place> = emptyList())
 
-fun handleDeviceRequest(m: Message): Handled = when (m.route) {
-    // SPL answers "OK" when no Garmin account is stored, which is our case.
+/**
+ * [creds] is the phone identity handed to the nüvi on /auth-info. With it the nüvi signs its own Live Services
+ * requests (SPL sends it only when an account is stored; without it SPL answers a bare "OK").
+ */
+fun handleDeviceRequest(m: Message, creds: (() -> String)? = null): Handled = when (m.route) {
     "/auth-info" -> {
         val unit = m.query["unit-identifier"]
         if (unit == null) Handled(response(400, "Missing unit-id parameter"), "auth-info without unit id")
-        else Handled(response(200, "OK"), "nüvi unit $unit said hello; services: " +
-            m.bodyRecords.mapNotNull { it["category"] }.joinToString(","))
+        else Handled(response(200, creds?.invoke() ?: "OK"), "nüvi unit $unit said hello; services: " +
+            m.bodyRecords.mapNotNull { it["category"] }.joinToString(",") + if (creds != null) " (sent Live Services identity)" else "")
     }
     "/find-destination" -> places(m, "nüvi destination")
     "/parking-spot" -> places(m, "Parking spot")

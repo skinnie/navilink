@@ -5,6 +5,8 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
+import app.navilink.live.Capture
+import app.navilink.live.LiveRouter
 import app.navilink.nuvi.Message
 import app.navilink.nuvi.NUVI_UUID
 import app.navilink.nuvi.PHONE_SERVICE_NAME
@@ -28,11 +30,22 @@ import kotlin.concurrent.thread
 class BtLink(
     private val log: (String) -> Unit,
     private val onPlaces: (String, List<Place>) -> Unit,
+    /** Answers requests the nüvi means for the internet (Live Services); null = refuse them as before. */
+    private val router: LiveRouter? = null,
+    /** The /auth-info answer with the phone identity (see live/Identity.kt). */
+    private val creds: (() -> String)? = null,
+    private val capture: Capture? = null,
+    /** Called when the nüvi opens or closes its GarminLink session. */
+    private val onSession: (Boolean) -> Unit = {},
 ) {
     private val adapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
     @Volatile private var client: BluetoothSocket? = null
     @Volatile private var server: BluetoothServerSocket? = null
     private val replies = LinkedBlockingQueue<Message>()
+
+    /** The nüvi currently connected to GarminLink, if any. */
+    @Volatile var session: String? = null
+        private set
 
     val connectedTo: String? get() = client?.takeIf { it.isConnected }?.remoteDevice?.let { it.name ?: it.address }
     val listening get() = server != null
@@ -57,17 +70,15 @@ class BtLink(
         client = s
         log("Connected to ${d.name}.")
         thread(name = "nuvi-reader", isDaemon = true) {
+            val input = s.inputStream.buffered()
             try {
                 while (true) {
-                    val m = readMessage(s.inputStream) ?: break
+                    val m = readMessage(input) ?: break
                     log("nüvi → phone (link 1):\n$m")
                     if (m.isResponse) replies.offer(m)
                     else {
                         // Not seen in SPL, but answer it the same way as on the GarminLink link.
-                        val h = handleDeviceRequest(m)
-                        s.outputStream.write(h.reply); s.outputStream.flush()
-                        log(h.event)
-                        if (h.places.isNotEmpty()) onPlaces(m.route, h.places)
+                        answer(m, s.outputStream, "link 1")
                     }
                 }
                 log("nüvi closed link 1.")
@@ -129,21 +140,42 @@ class BtLink(
     }
 
     private fun serve(s: BluetoothSocket) {
+        val who = s.remoteDevice.name ?: s.remoteDevice.address
+        session = who
+        onSession(true)
+        capture?.note("GarminLink session from $who")
         try {
             s.use {
+                val input = s.inputStream.buffered()
                 while (true) {
-                    val m = readMessage(s.inputStream) ?: break
-                    log("nüvi → phone (GarminLink):\n$m")
-                    val h = handleDeviceRequest(m)
-                    s.outputStream.write(h.reply); s.outputStream.flush()
-                    log("→ ${String(h.reply, Charsets.ISO_8859_1).lineSequence().first()} (${h.event})")
-                    if (h.places.isNotEmpty()) onPlaces(m.route, h.places)
+                    val m = readMessage(input) ?: break
+                    if (m.isResponse) { log("nüvi → phone (GarminLink), unexpected answer:\n$m"); continue }
+                    answer(m, s.outputStream, "GarminLink")
                 }
             }
             log("nüvi closed GarminLink.")
         } catch (e: IOException) {
             log("GarminLink connection ended: ${e.message}")
+        } finally {
+            if (session == who) session = null
+            capture?.note("GarminLink session from $who ended")
+            onSession(false)
         }
+    }
+
+    /** One request from the nüvi: Live Services go to [router], everything else is answered like SPL. */
+    private fun answer(m: Message, out: java.io.OutputStream, link: String) {
+        if (!m.forPhone && router != null) {
+            val reply = router.handle(m)
+            synchronized(out) { out.write(reply); out.flush() }
+            return
+        }
+        log("nüvi → phone ($link):\n$m")
+        val h = handleDeviceRequest(m, creds)
+        synchronized(out) { out.write(h.reply); out.flush() }
+        capture?.exchange(link, m, h.reply, h.event)
+        log("→ ${String(h.reply, Charsets.ISO_8859_1).lineSequence().first()} (${h.event})")
+        if (h.places.isNotEmpty()) onPlaces(m.route, h.places)
     }
 
     fun stopListening() {

@@ -60,8 +60,8 @@ android {
         applicationId = "app.navilink"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.3.1"
+        versionCode = 6
+        versionName = "0.4.0"
     }
     // One fixed key for every build, so a new APK installs over the old one.
     // Locally: nl.keystore / nl.keystore.password in local.properties. CI: NL_KEYSTORE / NL_KEYSTORE_PASSWORD.

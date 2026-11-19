@@ -68,6 +68,8 @@ interface PlacesPage {
     fun clear()
     /** One place: drive there (Bluetooth) or save it (cable). Several: a route. */
     fun send(stops: List<Place>)
+    /** Live Services over Bluetooth (traffic, weather ...); null where the platform has none. */
+    val live: LiveControls? get() = null
     var category: String
     fun installPois()
     fun saveGpi()
@@ -134,6 +136,7 @@ private fun NuviCard(p: PlacesPage) {
                         DropdownMenuItem({ Text(if (p.listening) "Stop listening (GarminLink)" else "Listen for the nüvi (GarminLink)") },
                             { more = false; p.toggleListen() })
                         DropdownMenuItem({ Text("Ping") }, { more = false; p.ping() })
+                        p.live?.let { l -> DropdownMenuItem({ Text("Share link captures") }, { more = false; l.shareCaptures() }) }
                         if (p.connected) DropdownMenuItem({ Text("Disconnect") }, { more = false; p.disconnect() })
                     }
                 }
@@ -159,8 +162,39 @@ private fun NuviCard(p: PlacesPage) {
                 }
             }
             if (!p.connected) SecondaryButton("Connect", { p.connect() }, Modifier.fillMaxWidth(), enabled = !p.busy && p.device != null)
+            p.live?.let { LiveSection(it) }
         }
     }
+}
+
+/** Live Services through the phone: on/off, weather source, state. */
+interface LiveControls {
+    val on: Boolean
+    fun setOn(v: Boolean)
+    val status: String
+    val weatherSources: List<String>
+    val weather: Int
+    fun setWeather(i: Int)
+    /** Share the capture files of the last sessions (for studying the link). */
+    fun shareCaptures()
+}
+
+@Composable
+private fun LiveSection(l: LiveControls) {
+    var pick by remember { mutableStateOf(false) }
+    NestedRow("Live Services", if (l.on) l.status else "Traffic, accidents and weather from the phone. Keeps the link up in the background.") {
+        Switch(l.on, { l.setOn(it) })
+    }
+    if (l.on) Box {
+        NestedRow("Weather", l.weatherSources[l.weather]) {
+            IconButton({ pick = true }) { Icon(Icons.Outlined.ArrowDropDown, "Weather source", tint = navi.muted) }
+        }
+        DropdownMenu(pick, { pick = false }, containerColor = navi.card) {
+            l.weatherSources.forEachIndexed { i, n -> DropdownMenuItem({ Text(n) }, { pick = false; l.setWeather(i) }) }
+        }
+    }
+    if (l.on) Text("Close Smartphone Link on the phone first: both can't offer the nüvi link at once.",
+        style = MaterialTheme.typography.bodySmall, color = navi.muted)
 }
 
 /** Typing or opening places. */

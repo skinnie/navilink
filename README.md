@@ -29,7 +29,8 @@ most models. NaviLink does the useful parts on its own:
 | Load your own POIs | — | **.gpi from GPX/GPI lists, installed over USB** |
 | Ready-made POI packs | — | **fuel, LPG, campsites, water… from OpenStreetMap and Foursquare, without doubling what's already on the Garmin** |
 | Get the nüvi's saved places back | kept inside the app | **save as GPX** |
-| Live traffic, weather, Garmin services | yes | no |
+| Live traffic, weather, Garmin services | yes | **yes, relayed to Garmin like Smartphone Link** (not yet tried on a real nüvi); weather can also come from Open-Meteo |
+| Stays connected with the screen off | often drops | **background service: reconnects and wakes the nüvi when it comes into range** |
 
 ## Get it
 
@@ -76,6 +77,28 @@ Switch NaviLink to **Bluetooth** (the switch at the top).
 If the nüvi doesn't react, press **Listen (GarminLink)**, open Smartphone Link on the nüvi's screen
 so it connects to the phone, then press **Send** again. **Ping** wakes the nüvi the way Smartphone
 Link does. The log at the bottom shows every message exchanged with the nüvi.
+
+### Live Services (traffic, accidents, weather)
+
+> **Not yet tried on a real nüvi.** The relay itself has been checked against Garmin's server:
+> a registration and a Lisbon traffic request went through it and came back intact.
+
+Turn on **Live Services** in the Bluetooth card. NaviLink then runs in the background (a
+notification shows the state) and does what Smartphone Link does for Live Services:
+
+- It answers the nüvi's `/auth-info` with a phone identity. The nüvi signs its own Live Services
+  requests with it, and no Garmin or Google account is needed.
+- It relays every request the nüvi addresses to the internet (to `gold.garmin.com`, over TLS) and
+  passes Garmin's answer back unchanged. That covers traffic and accidents, and also whatever else
+  Garmin still serves for free.
+- It keeps offering the link, and when the nüvi comes into Bluetooth range it pings it so it
+  connects. Turning Bluetooth off and on is handled too.
+- **Weather** can come from Garmin, from Open-Meteo when Garmin refuses or can't be reached (the
+  default), or from Open-Meteo only. Open-Meteo is free and needs no key.
+
+Close Smartphone Link first: both apps offer the same Bluetooth service. Every exchange is kept in
+capture files on the phone (*⋮ → Share link captures*). They hold the nüvi's unit ID and session
+keys, so share them only with people you trust.
 
 ### Places from the nüvi
 
@@ -143,6 +166,13 @@ messages. The phone sends `POST /new-route` with one line per stop; the nüvi se
 (`/auth-info`, `/find-destination`, `/parking-spot`, `/save-locations`) to a "GarminLink" service on
 the phone. NaviLink plays both sides.
 
+For Live Services, Smartphone Link is a plain HTTP relay. A request from the nüvi whose `Host` isn't
+`device` is sent unchanged to that host (port 443 over TLS for `*.garmin.com`), and the raw answer
+goes back. The nüvi builds Garmin's protobuf ("OBN") requests itself, using the identity from
+`/auth-info`. NaviLink reads the protobuf only to log which service was asked for and to answer
+weather from Open-Meteo, in Garmin's own `WeatherResponse` layout (rebuilt from Smartphone Link's
+message classes).
+
 By cable, NaviLink writes a GPX 1.1 file with Garmin's extensions (address, phone, category) into
 `Garmin/GPX`, which the nüvi reads when it starts. Details, including what's in firmware 8.50:
 [docs/PROTOCOL.md](docs/PROTOCOL.md).
@@ -154,6 +184,7 @@ Needs JDK 17 and the Android SDK (platform 36). `local.properties` must point at
 
 ```sh
 ./gradlew :app:desktopTest      # protocol and file tests (GPI tests also use gpsbabel if it's installed)
+NAVILINK_NET=1 ./gradlew :app:desktopTest --tests app.navilink.LiveNetTest   # relay + weather against the real servers
 ./gradlew :app:assembleDebug    # app/build/outputs/apk/debug/app-debug.apk
 ```
 
@@ -168,7 +199,9 @@ desktop JVM; the Android screens and Bluetooth are in `app/src/androidMain`.
 | `nuvi/CableGpx.kt` | the GPX file for sending by cable |
 | `pois/` | POI packs: OpenStreetMap and Foursquare sources, recognising POI sets already on the Garmin, leaving out what's there |
 | `core/` | Google Maps link parsing, GPX, GPI and Parquet reading (shared with [MapsToTom](https://github.com/skinnie/MapsToTom/tree/kotlin-app/composeApp/src/jvmSharedMain/kotlin/app/mapstotom/core)) |
+| `live/` | Live Services: relay (`Relay.kt`, `LiveRouter.kt`), phone identity (`Identity.kt`), protobuf (`Pb.kt`, `Obn.kt`), Open-Meteo weather (`Weather.kt`), capture files |
 | `BtLink.kt` | the two Bluetooth links |
+| `LinkService.kt`, `Live.kt` | background service: keeps GarminLink offered, wakes the nüvi, notification |
 | `UsbDrive.kt` | the nüvi's drive: POI files and the cable GPX file |
 
 ## Related

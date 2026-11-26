@@ -10,6 +10,23 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val appVersion = providers.gradleProperty("navilink.version").get()
+val appVersionCode = providers.gradleProperty("navilink.versionCode").get().toInt()
+// Windows and macOS installers refuse a major version of 0, so 0.5.0 is 1.5.0 there (Linux and Android keep 0.5.0).
+val installerVersion = if (appVersion.startsWith("0.")) "1." + appVersion.removePrefix("0.") else appVersion
+
+// app.navilink.core.APP_VERSION, so the app can say which version it is (User-Agent, About).
+val generateVersion = tasks.register("generateVersion") {
+    val out = layout.buildDirectory.dir("generated/version")
+    inputs.property("version", appVersion)
+    outputs.dir(out)
+    doLast {
+        val f = out.get().file("app/navilink/core/Version.kt").asFile
+        f.parentFile.mkdirs()
+        f.writeText("package app.navilink.core\n\n/** From gradle.properties (navilink.version). */\nconst val APP_VERSION = \"$appVersion\"\n")
+    }
+}
+
 kotlin {
     // The protocol and file code lives in "jvmShared" so it can be unit-tested on the desktop JVM.
     @OptIn(ExperimentalKotlinGradlePluginApi::class)
@@ -38,6 +55,7 @@ kotlin {
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
         }
         val jvmSharedMain by getting {
+            kotlin.srcDir(generateVersion.map { it.outputs.files.singleFile })
             dependencies { implementation(project(":osmimg")) }
         }
         val desktopMain by getting {
@@ -60,8 +78,8 @@ android {
         applicationId = "app.navilink"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.4.0"
+        versionCode = appVersionCode
+        versionName = appVersion
     }
     // One fixed key for every build, so a new APK installs over the old one.
     // Locally: nl.keystore / nl.keystore.password in local.properties. CI: NL_KEYSTORE / NL_KEYSTORE_PASSWORD.
@@ -98,8 +116,36 @@ compose.desktop {
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Dmg,
             )
             packageName = "NaviLink"
-            packageVersion = "1.0.0" // installers need MAJOR > 0
-            modules("java.xml")
+            packageVersion = appVersion
+            description = "Garmin maps, POIs and device manager"
+            vendor = "NaviLink"
+            licenseFile.set(rootProject.file("LICENSE"))
+            modules("java.xml", "java.instrument", "jdk.unsupported", "jdk.crypto.ec")
+            linux {
+                packageName = "navilink"
+                iconFile.set(project.file("icons/navilink.png"))
+                menuGroup = "Utility"
+                appCategory = "utils"
+                shortcut = true
+                debMaintainer = "5618623+skinnie@users.noreply.github.com"
+                debPackageVersion = appVersion
+            }
+            windows {
+                iconFile.set(project.file("icons/navilink.ico"))
+                menuGroup = "NaviLink"
+                shortcut = true
+                perUserInstall = true
+                dirChooser = true
+                // Fixed for good: Windows uses it to replace the installed version instead of adding a second one.
+                upgradeUuid = "298a7d54-a27c-413d-87e1-2e476bb2658d"
+                msiPackageVersion = installerVersion
+            }
+            macOS {
+                iconFile.set(project.file("icons/navilink.icns"))
+                bundleID = "app.navilink"
+                dmgPackageVersion = installerVersion
+                packageVersion = installerVersion
+            }
         }
     }
 }

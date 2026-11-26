@@ -1,7 +1,7 @@
 name: build
 
-# Every push and pull request: run the tests and build the Android app.
-# A tag like v0.1.0 also attaches the APK to a GitHub Release (v0.x = pre-release).
+# Every push and pull request: run the tests, build the Android app and the desktop installers.
+# A tag like v0.1.0 also attaches them to a GitHub Release (v0.x = pre-release).
 on:
   push:
     branches: [main]
@@ -41,4 +41,33 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: NaviLink-android.apk
+          prerelease: ${{ startsWith(github.ref, 'refs/tags/v0.') }}
+
+  # Desktop installers, each built on its own system (jpackage can't build for another one).
+  # Linux on Ubuntu 22.04: its package names also install on 24.04, Mint 22 and Debian 12.
+  # Windows and macOS installers are not code-signed: Windows SmartScreen and macOS Gatekeeper ask once.
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, task: packageDeb, dir: deb, out: NaviLink-linux.deb }
+          - { os: windows-latest, task: packageMsi, dir: msi, out: NaviLink-windows.msi }
+          - { os: macos-latest, task: packageDmg, dir: dmg, out: NaviLink-macos.dmg }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :app:${{ matrix.task }}
+      - name: Name the installer
+        shell: bash
+        run: cp "$(ls app/build/compose/binaries/main/${{ matrix.dir }}/* | head -1)" "${{ matrix.out }}"
+      - uses: actions/upload-artifact@v4
+        with: { name: "${{ matrix.out }}", path: "${{ matrix.out }}" }
+      - if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.out }}
           prerelease: ${{ startsWith(github.ref, 'refs/tags/v0.') }}

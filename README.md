@@ -34,9 +34,26 @@ most models. NaviLink does the useful parts on its own:
 
 ## Get it
 
-Download `NaviLink-android.apk` from the [Releases page](https://github.com/skinnie/navilink/releases)
-and open it on your phone or tablet (Android 8 or newer). Allow "install unknown apps" for your
-browser or file manager when Android asks.
+From the [Releases page](https://github.com/skinnie/navilink/releases):
+
+| | Download | Install |
+|---|---|---|
+| Android 8 or newer | `NaviLink-android.apk` | Open it on the phone or tablet; allow "install unknown apps" for your browser or file manager when Android asks. |
+| Linux (Ubuntu 22.04+, Mint 21+, Debian 12) | `NaviLink-linux.deb` | `sudo apt install ./NaviLink-linux.deb`, then NaviLink is in the menu under Accessories/Utilities. |
+| Windows 10/11 | `NaviLink-windows.msi` | Run it; it installs for your user only, no administrator needed. The installer isn't code-signed, so SmartScreen asks once ("More info", "Run anyway"). |
+| macOS | `NaviLink-macos.dmg` | Drag NaviLink to Applications. It isn't notarised: the first time, right-click it and choose Open. |
+
+Each new version installs over the old one. The version number is the same everywhere, except that Windows
+and macOS show 0.x as 1.x (their installers don't accept a 0).
+
+## On the device (Device tab)
+
+Like JaVaWa Device Manager, for any Garmin that shows up as a drive: what maps are on it and on its card, what
+is wrong with them (the same map twice, maps the model skips, damaged or locked files, too many maps), where each
+map covers, renaming maps and map sets inside the files, moving them between the built-in memory and the card,
+removing them with a copy kept, putting files of any kind into the folder the device reads them from, backup and
+restore, the startup message, and software from Garmin (device software, voices, vehicles, languages, the time-zone
+map) as Garmin's WebUpdater offered it. Licensed map updates and safety cameras stay with Garmin Express.
 
 ## Send places by cable (USB)
 
@@ -186,7 +203,12 @@ Needs JDK 17 and the Android SDK (platform 36). `local.properties` must point at
 ./gradlew :app:desktopTest      # protocol and file tests (GPI tests also use gpsbabel if it's installed)
 NAVILINK_NET=1 ./gradlew :app:desktopTest --tests app.navilink.LiveNetTest   # relay + weather against the real servers
 ./gradlew :app:assembleDebug    # app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:run              # the desktop app
+./gradlew :app:packageDeb       # Linux installer (packageMsi on Windows, packageDmg on macOS)
 ```
+
+The version lives in `gradle.properties` (`navilink.version`, `navilink.versionCode`). The icons are drawn by
+`tools/make-icons.py` (needs Pillow), which writes every size the installers and Android use.
 
 Kotlin and Compose. The protocol and file code is in `app/src/jvmSharedMain` and is tested on the
 desktop JVM; the Android screens and Bluetooth are in `app/src/androidMain`.
@@ -203,6 +225,7 @@ desktop JVM; the Android screens and Bluetooth are in `app/src/androidMain`.
 | `BtLink.kt` | the two Bluetooth links |
 | `LinkService.kt`, `Live.kt` | background service: keeps GarminLink offered, wakes the nüvi, notification |
 | `UsbDrive.kt` | the nüvi's drive: POI files and the cable GPX file |
+| `device/` | the Device tab (shared by desktop and Android); its file work is in `osmimg/` (`DeviceContents.kt`, `ImgEdit.kt`, `DeviceFiles.kt`, `GarminUpdates.kt`, `StartupText.kt`) |
 
 ## Related
 

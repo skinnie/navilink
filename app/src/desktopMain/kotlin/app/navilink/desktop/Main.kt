@@ -42,7 +42,12 @@ import java.io.File
 import javax.swing.JFileChooser
 
 fun main() = application {
-    Window(onCloseRequest = ::exitApplication, title = "NaviLink",
+    val icon = remember {
+        Thread.currentThread().contextClassLoader.getResourceAsStream("navilink.png")?.use {
+            androidx.compose.ui.graphics.painter.BitmapPainter(androidx.compose.ui.res.loadImageBitmap(it))
+        }
+    }
+    Window(onCloseRequest = ::exitApplication, title = "NaviLink", icon = icon,
         state = rememberWindowState(width = 1280.dp, height = 820.dp)) {
         val scope = rememberCoroutineScope()
         val m = remember { MapsModel(scope) }

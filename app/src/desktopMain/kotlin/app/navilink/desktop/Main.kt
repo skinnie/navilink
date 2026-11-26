@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
@@ -191,15 +192,50 @@ private class DesktopPoiHost(private val m: MapsModel) : app.navilink.pois.PoiHo
     override fun deviceName() = m.deviceName ?: "Garmin"
 }
 
+/** The device page's view of the chosen Garmin and card, with OpenStreetMap tiles cached on disk. */
+class DesktopDeviceHost(private val m: MapsModel, private val net: app.navilink.core.Net = app.navilink.core.RealNet()) : app.navilink.device.DeviceHost {
+    override fun drives(): Map<Storage, DriveFs> = m.roots.mapValues { (_, root) -> FileDriveFs(root) }
+    override fun deviceXml(): DeviceXml? = (m.device as? DeviceChoice.OnDrive)?.drive?.xml
+    override val backupDir: File get() = File(m.cache, "backup")
+    private val tiles = File(m.cache, "tiles")
+    override suspend fun mapTile(z: Int, x: Int, y: Int): androidx.compose.ui.graphics.ImageBitmap? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching { org.jetbrains.skia.Image.makeFromEncoded(app.navilink.device.cachedOsmTile(net, tiles, z, x, y)!!).toComposeImageBitmap() }.getOrNull()
+    }
+    override val deviceBackups: File get() = File(System.getProperty("user.home"), "NaviLink backups")
+    override suspend fun pickFiles(): List<osmimg.AddSource>? {
+        val c = JFileChooser().apply {
+            isMultiSelectionEnabled = true; dialogTitle = "Files to put on the device"
+            val exts = osmimg.AddKind.allExts.toTypedArray()
+            fileFilter = javax.swing.filechooser.FileNameExtensionFilter("Files a Garmin uses (${exts.joinToString(", ") { ".$it" }})", *exts)
+        }
+        if (c.showDialog(null, "Choose") != JFileChooser.APPROVE_OPTION) return null
+        val files = c.selectedFiles.toList().ifEmpty { listOfNotNull(c.selectedFile) }
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            files.filter { it.isFile }.map { f ->
+                val d = if (f.name.endsWith(".img", true)) runCatching { osmimg.readImgDetails(f) }.getOrNull() else null
+                osmimg.AddSource(f.name, f.length(), d) { f.inputStream() }
+            }
+        }
+    }
+}
+
 @Composable
 fun MapsWindow(m: MapsModel) {
     val scope = rememberCoroutineScope()
     val pois = remember { app.navilink.pois.PoiPacks(scope, DesktopPoiHost(m), log = m::say) }
+    val devHost = remember { DesktopDeviceHost(m) }
+    val dev = remember { app.navilink.device.DeviceManager(scope, devHost, log = m::say) }
     var page by remember { mutableStateOf(0) }
-    // A new device or card in the bar: look at its POIs again.
-    LaunchedEffect(m.roots) { if (page == 1) pois.scan() }
+    // A new device or card in the bar: look at its POIs and maps again.
+    LaunchedEffect(m.roots) { if (page == 1) pois.scan(); if (page == 2) dev.scan() }
     Column(Modifier.fillMaxSize()) {
         DeviceBar(m, page) { page = it }
+        if (page == 2) {
+            app.navilink.device.DeviceScreen(dev, devHost, Modifier.weight(1f).fillMaxWidth().padding(24.dp))
+            if (m.showLog) LogPanel(m, Modifier.fillMaxWidth().height(200.dp))
+            StatusBar(m)
+            return@Column
+        }
         if (page == 1) {
             app.navilink.pois.PoiPacksScreen(pois, Modifier.weight(1f).fillMaxWidth().padding(24.dp))
             if (m.showLog) LogPanel(m, Modifier.fillMaxWidth().height(200.dp))
@@ -235,9 +271,9 @@ fun DeviceBar(m: MapsModel, page: Int = 0, onPage: (Int) -> Unit = {}) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("NaviLink", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(end = 4.dp))
-            SingleChoiceSegmentedButtonRow(Modifier.width(200.dp).padding(end = 8.dp)) {
-                listOf("Maps", "POIs").forEachIndexed { i, t ->
-                    SegmentedButton(page == i, onClick = { onPage(i) }, shape = SegmentedButtonDefaults.itemShape(i, 2), icon = {}) { Text(t, maxLines = 1) }
+            SingleChoiceSegmentedButtonRow(Modifier.width(330.dp).padding(end = 8.dp)) {
+                listOf("Maps", "POIs", "On the device").forEachIndexed { i, t ->
+                    SegmentedButton(page == i, onClick = { onPage(i) }, shape = SegmentedButtonDefaults.itemShape(i, 3), icon = {}) { Text(t, maxLines = 1) }
                 }
             }
             val free = m.busy == null

@@ -56,7 +56,7 @@ object State {
     var device by mutableStateOf<String?>(null) // MAC address
     var cable by mutableStateOf(true)             // send by cable (USB); false = Bluetooth (untested on a real nüvi)
     var drive by mutableStateOf<String?>(null)    // name of the nüvi's drive last picked
-    var page by mutableStateOf(0)                 // 0 = places and routes, 1 = maps, 2 = POIs
+    var page by mutableStateOf(0)                 // 0 = places and routes, 1 = maps, 2 = POIs, 3 = on the device
     var liveStatus by mutableStateOf("Off")         // Live Services line (LinkService)
 
     fun log(s: String) {
@@ -83,6 +83,18 @@ object MapsApp {
     }
     fun detach(a: MainActivity) { if (host?.activity === a) host?.activity = null }
 
+    private var device: app.navilink.device.DeviceManager? = null
+    private var deviceHost: AndroidDeviceHost? = null
+    /** The device page's model and host; it shares the Maps page's drives. */
+    fun device(a: MainActivity): Pair<app.navilink.device.DeviceManager, AndroidDeviceHost> {
+        val maps = get(a)
+        val h = deviceHost ?: AndroidDeviceHost(maps, host!!).also { deviceHost = it }
+        val m = device ?: app.navilink.device.DeviceManager(
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main), h, State::log,
+        ).also { device = it }
+        return m to h
+    }
+
     private var pois: app.navilink.pois.PoiPacks? = null
     /** The POIs page's model; it shares the Maps page's drives. */
     fun pois(a: MainActivity): app.navilink.pois.PoiPacks {
@@ -101,6 +113,8 @@ class MainActivity : ComponentActivity() {
     private var pendingOpen: CompletableDeferred<Uri?>? = null
     private var pendingCreate: CompletableDeferred<Uri?>? = null
     private val opener = registerForActivityResult(ActivityResultContracts.OpenDocument()) { pendingOpen?.complete(it) }
+    private var pendingMany: CompletableDeferred<List<Uri>>? = null
+    private val manyOpener = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { pendingMany?.complete(it) }
     private val creator = registerForActivityResult(ActivityResultContracts.CreateDocument("application/gpx+xml")) { pendingCreate?.complete(it) }
     private val gpiCreator = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { pendingCreate?.complete(it) }
     private var pendingTree: CompletableDeferred<Uri?>? = null
@@ -142,6 +156,13 @@ class MainActivity : ComponentActivity() {
             contentResolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         }
         return tree
+    }
+
+    /** Several files at once (the device page's "Add files"); empty when the user backed out. */
+    suspend fun pickFiles(types: Array<String>): List<Uri> {
+        val d = CompletableDeferred<List<Uri>>().also { pendingMany = it }
+        manyOpener.launch(types)
+        return d.await()
     }
 
     suspend fun pickFile(types: Array<String>): Uri? {
@@ -381,6 +402,7 @@ class MainActivity : ComponentActivity() {
             when (State.page) {
                 1 -> PhoneMapsScreen(MapsApp.get(this@MainActivity), mod)
                 2 -> app.navilink.pois.PoiPacksScreen(MapsApp.pois(this@MainActivity), mod)
+                3 -> MapsApp.device(this@MainActivity).let { (m, h) -> app.navilink.device.DeviceScreen(m, h, mod) }
                 else -> PlacesScreen(places, mod)
             }
         }

@@ -8,7 +8,9 @@ import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import app.navilink.maps.MapFile
 import app.navilink.maps.MapsHost
+import androidx.compose.ui.graphics.asImageBitmap
 import osmimg.DriveFs
+import osmimg.deviceXml
 import osmimg.FsEntry
 import osmimg.ImgInfo
 import osmimg.readImgInfo
@@ -96,13 +98,25 @@ class SafDriveFs(private val ctx: Context, private val tree: Uri) : DriveFs {
     }
 
     override fun delete(path: String): Boolean = find(path)?.takeIf { it.isFile }?.delete() ?: false
+
+    override fun <T> readChannel(path: String, block: (java.nio.channels.FileChannel) -> T): T? = find(path)?.takeIf { it.isFile }?.let { f ->
+        ctx.contentResolver.openFileDescriptor(f.uri, "r")!!.use { pfd -> FileInputStream(pfd.fileDescriptor).channel.use(block) }
+    }
+
+    // "rw" opens without cutting the file short ("w" may); the patches only write, so a write channel is enough.
+    override fun patch(path: String, patches: List<osmimg.Patch>) {
+        val f = find(path)?.takeIf { it.isFile } ?: error("no $path")
+        ctx.contentResolver.openFileDescriptor(f.uri, "rw")!!.use { pfd ->
+            FileOutputStream(pfd.fileDescriptor).channel.use { osmimg.applyPatches(it, patches) }
+        }
+    }
 }
 
 /**
  * What the Maps screen needs from Android. Lives as long as the app; [activity] is the screen that
  * is up now, for the pickers.
  */
-class AndroidMapsHost(private val app: Context) : MapsHost {
+class AndroidMapsHost(val app: Context) : MapsHost {
     var activity: MainActivity? = null
     private val prefs get() = app.getSharedPreferences("navilink", Context.MODE_PRIVATE)
     // The nüvi's drive is the same one the cable features use.
@@ -142,5 +156,47 @@ class AndroidMapsHost(private val app: Context) : MapsHost {
             } }.getOrNull()
         }
         return MapFile(name, bytes, info) { cr.openInputStream(uri) ?: error("can't read $name") }
+    }
+}
+
+/**
+ * What the "On the device" page needs from Android: the same drive and card the Maps page uses, the
+ * folder picker, and OpenStreetMap tiles for the coverage map.
+ */
+class AndroidDeviceHost(private val maps: app.navilink.maps.PhoneMaps, private val host: AndroidMapsHost,
+                        private val net: app.navilink.core.Net = app.navilink.core.RealNet()) : app.navilink.device.DeviceHost {
+    override fun drives(): Map<osmimg.Storage, DriveFs> { maps.loadRemembered(); return maps.drives }
+    override fun deviceXml(): osmimg.DeviceXml? = maps.drives[osmimg.Storage.INTERNAL]?.let { runCatching { it.deviceXml() }.getOrNull() }
+    override val backupDir: java.io.File get() = host.backupDir
+    private val tiles get() = java.io.File(host.cache.parentFile, "tiles")
+    override suspend fun mapTile(z: Int, x: Int, y: Int): androidx.compose.ui.graphics.ImageBitmap? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching {
+            val png = app.navilink.device.cachedOsmTile(net, tiles, z, x, y)!!
+            android.graphics.BitmapFactory.decodeByteArray(png, 0, png.size)!!.asImageBitmap()
+        }.getOrNull()
+    }
+    override val canPick get() = true
+    override suspend fun pick(card: Boolean) { maps.pickDriveNow(card) }
+    // Removed with the app: said where backups are shown, so a user can copy them off the phone.
+    override val deviceBackups: java.io.File get() = java.io.File(host.app.getExternalFilesDir(null) ?: host.app.filesDir, "device-backups")
+    override val here: String get() = "this phone"
+
+    override suspend fun pickFiles(): List<osmimg.AddSource>? {
+        val a = host.activity ?: return null
+        val uris = a.pickFiles(arrayOf("*/*")).ifEmpty { return null }
+        val cr = host.app.contentResolver
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            uris.map { uri ->
+                var name = "file"; var bytes = -1L
+                cr.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME, android.provider.OpenableColumns.SIZE), null, null, null)?.use { c ->
+                    if (c.moveToFirst()) { name = c.getString(0) ?: name; if (!c.isNull(1)) bytes = c.getLong(1) }
+                }
+                val d = if (name.endsWith(".img", true)) runCatching {
+                    cr.openFileDescriptor(uri, "r")!!.use { pfd -> FileInputStream(pfd.fileDescriptor).channel.use { ch -> if (bytes < 0) bytes = ch.size(); osmimg.readImgDetails(ch) } }
+                }.getOrNull() else null
+                if (bytes < 0) bytes = runCatching { cr.openFileDescriptor(uri, "r")!!.use { it.statSize } }.getOrDefault(0)
+                osmimg.AddSource(name, bytes, d) { cr.openInputStream(uri) ?: error("can't read $name") }
+            }
+        }
     }
 }

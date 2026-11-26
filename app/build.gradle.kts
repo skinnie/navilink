@@ -105,5 +105,7 @@ compose.desktop {
 }
 
 tasks.withType<Test>().configureEach {
-    listOf("nl.gpi", "nl.shots", "nl.poisets", "nl.poilive").forEach { k -> project.findProperty(k)?.let { systemProperty(k, it) } }
+    // Test files go on the project's drive, not the system disk's /tmp.
+    layout.buildDirectory.dir("test-tmp").get().asFile.let { it.mkdirs(); systemProperty("java.io.tmpdir", it.path) }
+    listOf("nl.gpi", "nl.shots", "nl.poisets", "nl.poilive", "nl.devdir", "nl.tiles").forEach { k -> project.findProperty(k)?.let { systemProperty(k, it) } }
 }

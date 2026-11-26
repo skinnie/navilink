@@ -10,6 +10,19 @@ import javax.xml.parsers.DocumentBuilderFactory
  */
 data class ImgSlot(val dataType: String, val path: String, val baseName: String?)
 
+/**
+ * One file entry under MassStorageMode/DataType: [path] relative to the drive root (as the file spells it),
+ * [ext] lower case, [baseName] set for a fixed file name, [direction] InputToUnit / OutputFromUnit / InputOutput.
+ */
+data class DataFile(val dataType: String, val path: String, val ext: String, val baseName: String?, val direction: String) {
+    val toUnit: Boolean get() = direction.equals("InputToUnit", true) || direction.equals("InputOutput", true)
+}
+
+/** A piece of Garmin software the device knows (firmware, voice, vehicle...): version 0.0 = not on it yet. */
+data class UpdateFileEntry(val partNumber: String, val major: Int, val minor: Int, val path: String, val fileName: String) {
+    val version: Int get() = major * 100 + minor
+}
+
 /** What `GarminDevice.xml` says about a device. The unit ID is deliberately not kept. */
 data class DeviceXml(
     val partNumber: String,
@@ -17,6 +30,12 @@ data class DeviceXml(
     val softwareVersion: String,
     val imgSlots: List<ImgSlot>,
     val poiPath: String?,
+    /** BirdsEye (.jnx) and custom map (.kmz) folders the device declares, as (extension, path). */
+    val rasterPaths: List<Pair<String, String>> = emptyList(),
+    /** Every file entry the device declares, for installing other kinds of files. */
+    val dataFiles: List<DataFile> = emptyList(),
+    /** The UpdateFile list: what Garmin's update service is asked about. */
+    val updateFiles: List<UpdateFileEntry> = emptyList(),
 ) {
     /** The device loads `*.img` files with any name. */
     val anyImgName: Boolean get() = imgSlots.any { it.baseName == null }
@@ -62,24 +81,37 @@ fun readGarminDeviceXml(data: ByteArray): DeviceXml {
     val model = root.child("Model")
     val slots = mutableListOf<ImgSlot>()
     var poi: String? = null
+    val raster = mutableListOf<Pair<String, String>>()
+    val files = mutableListOf<DataFile>()
     root.child("MassStorageMode")?.children("DataType")?.forEach { dt ->
         val name = dt.text("Name") ?: return@forEach
         for (file in dt.children("File")) {
             val loc = file.child("Location") ?: continue
             val ext = loc.text("FileExtension")?.lowercase()
             val path = loc.text("Path") ?: ""
+            if (ext != null) files += DataFile(name, path.trim('/'), ext, loc.text("BaseName"), file.text("TransferDirection") ?: "")
             if (ext == "img" && file.child("Specification")?.text("Identifier") == "IMG") {
                 slots += ImgSlot(name, path, loc.text("BaseName"))
             } else if (name == "CustomPOI" && ext == "gpi") {
                 poi = path
+            } else if ((ext == "jnx" || ext == "kmz") && (ext to path) !in raster) {
+                raster += ext to path
             }
         }
     }
+    val updates = root.child("MassStorageMode")?.children("UpdateFile").orEmpty().mapNotNull { u ->
+        val v = u.child("Version")
+        UpdateFileEntry(u.text("PartNumber") ?: return@mapNotNull null, v?.text("Major")?.toIntOrNull() ?: 0, v?.text("Minor")?.toIntOrNull() ?: 0,
+            (u.text("Path") ?: "").trim('/'), u.text("FileName") ?: return@mapNotNull null)
+    }.distinct()
     return DeviceXml(
         partNumber = model?.text("PartNumber") ?: "",
         model = model?.text("Description") ?: "",
         softwareVersion = model?.text("SoftwareVersion") ?: "",
         imgSlots = slots,
         poiPath = poi,
+        rasterPaths = raster,
+        dataFiles = files,
+        updateFiles = updates,
     )
 }

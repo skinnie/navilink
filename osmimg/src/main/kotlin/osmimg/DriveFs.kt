@@ -3,6 +3,8 @@ package osmimg
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.io.RandomAccessFile
+import java.nio.channels.FileChannel
 
 /** A file or folder on a [DriveFs]. */
 data class FsEntry(val name: String, val isDir: Boolean, val bytes: Long)
@@ -29,6 +31,18 @@ interface DriveFs {
     /** Renames the file at [path] to [newName] in the same folder. */
     fun rename(path: String, newName: String)
     fun delete(path: String): Boolean
+
+    /** Runs [block] on [path] opened for reads at any position; null when the platform can't. */
+    fun <T> readChannel(path: String, block: (FileChannel) -> T): T? = null
+
+    /** Tiles, areas and flags of the .img at [path]. */
+    fun details(path: String): ImgDetails? = runCatching { readChannel(path, ::readImgDetails) }.getOrNull()
+
+    /** Writes [patches] into the existing file at [path] in place and syncs it to the disk. */
+    fun patch(path: String, patches: List<Patch>): Unit = error("This drive can't change files in place.")
+
+    /** Moves [path] to [newPath] on this drive without copying (creating folders); false when it can't. */
+    fun moveWithin(path: String, newPath: String): Boolean = false
 }
 
 /** The real spelling of [rel] on [fs] ("garmin/GMAPSUPP.IMG" -> "Garmin/gmapsupp.img"), as far as it exists. */
@@ -129,4 +143,18 @@ class FileDriveFs(val root: File, override val name: String = root.name.ifEmpty 
         check(from.renameTo(File(from.parentFile, newName))) { "could not rename ${from.name} to $newName" }
     }
     override fun delete(path: String): Boolean = f(path).let { it.isFile && it.delete() }
+    override fun <T> readChannel(path: String, block: (FileChannel) -> T): T? =
+        f(path).takeIf { it.isFile }?.let { file -> RandomAccessFile(file, "r").use { block(it.channel) } }
+    override fun patch(path: String, patches: List<Patch>) {
+        val file = f(path)
+        check(file.isFile) { "no $path" }
+        RandomAccessFile(file, "rw").use { applyPatches(it.channel, patches) }
+    }
+    override fun moveWithin(path: String, newPath: String): Boolean {
+        val from = f(path)
+        val to = f(newPath)
+        if (!from.isFile || to.exists()) return false
+        to.parentFile.mkdirs()
+        return from.renameTo(to)
+    }
 }

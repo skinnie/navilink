@@ -117,19 +117,28 @@ class PhoneMaps(private val scope: CoroutineScope, private val host: MapsHost, p
 
     /** First open: the drives picked before, and the last site's list. */
     fun start() {
-        if (drive == null) drive = host.remembered(false)
-        if (card == null) card = host.remembered(true)
+        loadRemembered()
         rescan()
         if (premade.isEmpty()) chooseSource(source)
     }
 
     // ---- the nüvi ----
 
-    fun pickDrive(card: Boolean) = scope.launch {
-        val fs = host.pickDrive(card) ?: return@launch
-        if (card) this@PhoneMaps.card = fs else drive = fs
+    /** The drive and card picked before, when none are chosen yet. Also used by the device page. */
+    fun loadRemembered() {
+        if (drive == null) drive = host.remembered(false)
+        if (card == null) card = host.remembered(true)
+    }
+
+    fun pickDrive(card: Boolean) = scope.launch { pickDriveNow(card) }
+
+    /** Asks for the drive (or card) and reads it; false when the user backed out. */
+    suspend fun pickDriveNow(card: Boolean): Boolean {
+        val fs = host.pickDrive(card) ?: return false
+        if (card) this.card = fs else drive = fs
         done = null
         rescan()
+        return true
     }
 
     fun removeCard() { host.forget(true); card = null; rescan() }

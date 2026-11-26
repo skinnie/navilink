@@ -18,6 +18,8 @@ dependencies {
 }
 
 tasks.test {
+    // Test files go on the project's drive, not the system disk's /tmp.
+    layout.buildDirectory.dir("test-tmp").get().asFile.let { it.mkdirs(); systemProperty("java.io.tmpdir", it.path) }
     // Real builds are off by default: -Pnl.maps=<region> [-Pnl.maps.max=<bytes>] [-Pnl.maps.bike=true]
     listOf("nl.maps", "nl.maps.max", "nl.maps.bike", "nl.imgs").forEach { k -> project.findProperty(k)?.let { systemProperty(k, it) } }
     if (project.hasProperty("nl.maps")) { outputs.upToDateWhen { false }; testLogging.showStandardStreams = true }

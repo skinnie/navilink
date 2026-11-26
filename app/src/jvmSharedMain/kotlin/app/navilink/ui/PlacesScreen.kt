@@ -87,10 +87,23 @@ val FoldedMap: ImageVector by lazy {
     }.build()
 }
 
-/** The app frame: a title bar and Places / Maps / POIs at the bottom (a rail on wide screens). */
+/** The "On the device" icon (a handheld GPS); not in the small icon set the app ships. */
+val Handheld: ImageVector by lazy {
+    ImageVector.Builder("Handheld", 24.dp, 24.dp, 24f, 24f).path(
+        stroke = SolidColor(androidx.compose.ui.graphics.Color.Black), strokeLineWidth = 1.8f, strokeLineJoin = StrokeJoin.Round,
+    ) {
+        // Body with rounded corners, the screen, and the antenna.
+        moveTo(8f, 6f); lineTo(16f, 6f); quadTo(18f, 6f, 18f, 8f); lineTo(18f, 19f); quadTo(18f, 21f, 16f, 21f)
+        lineTo(8f, 21f); quadTo(6f, 21f, 6f, 19f); lineTo(6f, 8f); quadTo(6f, 6f, 8f, 6f); close()
+        moveTo(8.5f, 8.5f); lineTo(15.5f, 8.5f); lineTo(15.5f, 14.5f); lineTo(8.5f, 14.5f); close()
+        moveTo(8f, 6f); lineTo(8f, 2.5f)
+    }.build()
+}
+
+/** The app frame: a title bar and Places / Maps / POIs / Device at the bottom (a rail on wide screens). */
 @Composable
 fun AppShell(page: Int, onPage: (Int) -> Unit, modifier: Modifier = Modifier, content: @Composable (Modifier) -> Unit) {
-    val items = listOf("Places" to Icons.Outlined.Place, "Maps" to FoldedMap, "POIs" to Icons.Outlined.Star)
+    val items = listOf("Places" to Icons.Outlined.Place, "Maps" to FoldedMap, "POIs" to Icons.Outlined.Star, "Device" to Handheld)
     BoxWithConstraints(modifier.fillMaxSize().background(navi.background)) {
         if (maxWidth >= 720.dp) Row(Modifier.fillMaxSize()) {
             NavigationRail(Modifier.fillMaxHeight(), containerColor = navi.card, header = { Spacer(Modifier.height(Space.small)) }) {
